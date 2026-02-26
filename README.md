@@ -1,50 +1,77 @@
-# Welcome to your Expo app 👋
+# Language Mobile App (Phase 1)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Expo Router mobile client for the task-based language learning MVP.
 
-## Get started
+## Setup
 
-1. Install dependencies
-
+1. Install dependencies:
    ```bash
    npm install
    ```
-
-2. Start the app
-
+2. Create env file:
    ```bash
-   npx expo start
+   cp .env.example .env
+   ```
+3. Set backend base URL in `.env`:
+   - iOS simulator: `http://localhost:4000/api`
+   - Android emulator: `http://10.0.2.2:4000/api`
+   - Expo Go physical device: use your computer LAN IP (for example `http://192.168.1.10:4000/api`)
+   - If `.env` still has `localhost` on native, the app now auto-rewrites it to Expo host LAN IP.
+4. Start app:
+   ```bash
+   npm run start
    ```
 
-In the output, you'll find options to open the app in a
+## Current Implementation Slice
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+- Auth flow (`/(auth)/login`) integrated with backend login/profile/logout.
+- Main tabs:
+  - `/(tabs)/lessons`
+  - `/(tabs)/vocabulary`
+  - `/(tabs)/profile`
+- Lesson detail route: `/lesson/[lessonId]`
+- Task runner route: `/runner/[lessonId]`
+- Lesson results route: `/results/[lessonId]`
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Notes
 
-## Get a fresh project
+- Session persistence is implemented (secure store on native when available, safe browser storage fallback on web).
+- Progress sync events are implemented with queued batching and retry.
+- Dashboard now enforces level-order lesson progression (future lessons lock until current is completed).
+- Select any text in task prompts and tap Add to Vocabulary to save it.
+- Vocabulary sync is user-scoped: add responses merge locally immediately, then screen refreshes from backend source of truth.
+- Full `LISTENING_TEXT` audio playback integration is still planned in the next implementation slice.
 
-When you're ready, run:
+## Production Builds (EAS)
 
-```bash
-npm run reset-project
-```
+- Android production APK:
+  ```bash
+  npm run build:android:production
+  ```
+- Android Play Store bundle (`.aab`):
+  ```bash
+  npm run build:android:store
+  ```
+- iOS production archive (`.ipa`):
+  ```bash
+  npm run build:ios:production
+  ```
+- Build Android + iOS in one command:
+  ```bash
+  npm run build:all:production
+  ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Tests
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Run tests once:
+  ```bash
+  npm run test
+  ```
+- Watch mode:
+  ```bash
+  npm run test:watch
+  ```
+- Coverage run:
+  ```bash
+  npm run test:coverage
+  ```
