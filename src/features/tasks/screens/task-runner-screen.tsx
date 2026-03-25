@@ -21,7 +21,10 @@ import {
   prefetchAudio,
 } from '@/src/features/tasks/services/audio-cache';
 import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
-import { addSelectionToVocabulary } from '@/src/features/vocabulary/services/add-word-to-vocabulary';
+import {
+  addSelectionToVocabulary,
+  normalizeVocabularySelection,
+} from '@/src/features/vocabulary/services/add-word-to-vocabulary';
 import {
   getCachedVocabulary,
   mergeCachedVocabulary,
@@ -425,9 +428,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         const result = await addSelectionToVocabulary(token, user.id, rawWord);
         if (result.ok && result.vocabulary) {
           const addedVocabulary = result.vocabulary;
+          const normalizedEntryKey = normalizeVocabularySelection(addedVocabulary.entry.englishText);
           setVocabularyByText((prev) => ({
             ...prev,
-            [addedVocabulary.entry.englishText.toLowerCase()]: addedVocabulary,
+            ...(normalizedEntryKey ? { [normalizedEntryKey]: addedVocabulary } : {}),
           }));
         }
         setVocabularyNotice(result.message);
@@ -586,30 +590,61 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             Tap a word once to add it to learner vocabulary. Tap it again to remove it.
           </Text>
 
-          <Text style={styles.wordFlow}>
+          <View style={styles.wordFlow}>
             {wordTokens.map((token) => {
               if (!token.normalized) {
-                return token.text;
+                return (
+                  <Text key={token.key} style={styles.wordWhitespace}>
+                    {token.text}
+                  </Text>
+                );
               }
 
               const isSelected = Boolean(vocabularyByText[token.normalized]);
               const isPending = Boolean(pendingWords[token.normalized]);
+              const selectedEntry = vocabularyByText[token.normalized];
+              const armenianTranslation =
+                selectedEntry?.entry.translations.find(
+                  (translation) => translation.languageCode === 'am',
+                )?.translation ?? null;
+              const showSelectedTranslation = Boolean(armenianTranslation);
+
               return (
-                <Text
+                <Pressable
                   key={token.key}
                   onPress={() => {
                     void handleToggleWordVocabulary(token.text, token.normalized);
                   }}
                   style={[
-                    styles.wordToken,
-                    isSelected && styles.wordTokenSelected,
-                    isPending && styles.wordTokenPending,
+                    styles.wordTokenPressable,
+                    showSelectedTranslation && styles.wordTokenStack,
+                    !showSelectedTranslation && isSelected && styles.wordTokenInlineSelected,
+                    !showSelectedTranslation && isPending && styles.wordTokenInlinePending,
                   ]}>
-                  {token.text}
-                </Text>
+                  {showSelectedTranslation ? (
+                    <Text
+                      adjustsFontSizeToFit
+                      ellipsizeMode="tail"
+                      minimumFontScale={0.8}
+                      numberOfLines={1}
+                      style={styles.wordTokenTranslation}>
+                      {armenianTranslation}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.wordTokenText,
+                      !showSelectedTranslation && styles.wordTokenPlainText,
+                      showSelectedTranslation && styles.wordTokenTextSelected,
+                      isSelected && !showSelectedTranslation && styles.wordTokenTextSelected,
+                      isPending && styles.wordTokenTextPending,
+                    ]}>
+                    {token.text}
+                  </Text>
+                </Pressable>
               );
             })}
-          </Text>
+          </View>
 
           {vocabularyNotice ? <Text style={styles.notice}>{vocabularyNotice}</Text> : null}
         </View>
@@ -637,7 +672,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
 function createVocabularyLookup(items: LearnerVocabularyItem[]) {
   return items.reduce<Record<string, LearnerVocabularyItem>>((acc, item) => {
-    acc[item.entry.englishText.trim().toLowerCase()] = item;
+    const normalized = normalizeVocabularySelection(item.entry.englishText);
+    if (normalized) {
+      acc[normalized] = item;
+    }
     return acc;
   }, {});
 }
@@ -833,22 +871,55 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   wordFlow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  wordWhitespace: {
     color: '#0f172a',
     fontSize: 18,
-    flexWrap: 'wrap',
-    lineHeight: 34,
+    lineHeight: 28,
   },
-  wordToken: {
-    borderRadius: 8,
+  wordTokenPressable: {
+    marginBottom: 4,
+  },
+  wordTokenStack: {
+    alignItems: 'center',
+    gap: 1,
+    marginHorizontal: 1,
+    maxWidth: 132,
+  },
+  wordTokenInlineSelected: {
+    borderRadius: 6,
+    color: '#0f766e',
+    paddingHorizontal: 2,
+  },
+  wordTokenInlinePending: {
+    borderRadius: 6,
+    color: '#b45309',
+    paddingHorizontal: 2,
+  },
+  wordTokenTranslation: {
+    color: '#0f766e',
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+    maxWidth: '100%',
+    textAlign: 'center',
+  },
+  wordTokenText: {
     color: '#0f172a',
+    fontSize: 18,
+    lineHeight: 24,
   },
-  wordTokenSelected: {
-    backgroundColor: '#99f6e4',
-    color: '#134e4a',
+  wordTokenPlainText: {
+    lineHeight: 28,
   },
-  wordTokenPending: {
-    backgroundColor: '#fde68a',
-    color: '#78350f',
+  wordTokenTextSelected: {
+    color: '#0f766e',
+  },
+  wordTokenTextPending: {
+    color: '#b45309',
   },
   notice: {
     color: '#0f766e',

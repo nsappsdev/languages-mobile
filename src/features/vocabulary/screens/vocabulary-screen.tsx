@@ -1,30 +1,51 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
+  PanResponder,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import { apiClient, ApiError } from '@/src/shared/api/client';
-import { useSession } from '@/src/shared/auth/session-context';
+import { sortLessonsByLevelOrder } from '@/src/features/lessons/lesson-locking';
+import {
+  buildLessonVocabularySections,
+  type LessonVocabularySection,
+} from '@/src/features/vocabulary/services/lesson-vocabulary';
 import {
   getCachedVocabulary,
   setCachedVocabulary,
 } from '@/src/features/vocabulary/services/vocabulary-sync';
+import { apiClient, ApiError } from '@/src/shared/api/client';
+import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import type { LearnerVocabularyItem } from '@/src/types/domain';
-import { useFocusEffect } from '@react-navigation/native';
+import type {
+  LearnerVocabularyItem,
+  LearnerVocabularyStatus,
+  Lesson,
+} from '@/src/types/domain';
+
+const REVIEW_SWIPE_THRESHOLD = 90;
 
 export function VocabularyScreen() {
   const { token, user } = useSession();
   const [items, setItems] = useState<LearnerVocabularyItem[]>([]);
+  const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeReviewSectionId, setActiveReviewSectionId] = useState<string | null>(null);
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [reviewMeta, setReviewMeta] = useState<string | null>(null);
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const reviewCardPosition = useRef(new Animated.ValueXY()).current;
 
   const fetchVocabulary = useCallback(
     async (isRefresh = false) => {
@@ -39,9 +60,14 @@ export function VocabularyScreen() {
       setError(null);
       setSyncMeta(null);
       try {
-        const response = await apiClient.getMyVocabulary(token);
-        setItems(response.vocabulary);
-        await setCachedVocabulary(user.id, response.vocabulary);
+        const [vocabularyResponse, lessonsResponse] = await Promise.all([
+          apiClient.getMyVocabulary(token),
+          apiClient.getLessons(token),
+        ]);
+        const sortedLessons = [...lessonsResponse.lessons].sort(sortLessonsByLevelOrder);
+        setItems(vocabularyResponse.vocabulary);
+        setLessons(sortedLessons);
+        await setCachedVocabulary(user.id, vocabularyResponse.vocabulary);
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           return;
@@ -71,6 +97,7 @@ export function VocabularyScreen() {
   useEffect(() => {
     if (!token || !user?.id) {
       setItems([]);
+      setLessons([]);
       setIsLoading(false);
       return;
     }
@@ -105,7 +132,9 @@ export function VocabularyScreen() {
   const summary = useMemo(() => {
     return items.reduce(
       (acc, item) => {
-        acc.total += 1;
+        if (item.status !== 'MASTERED') {
+          acc.total += 1;
+        }
         acc[item.status] += 1;
         return acc;
       },
@@ -117,6 +146,157 @@ export function VocabularyScreen() {
       },
     );
   }, [items]);
+
+  const activeItems = useMemo(
+    () => items.filter((item) => item.status !== 'MASTERED'),
+    [items],
+  );
+
+  const allSections = useMemo(
+    () => buildLessonVocabularySections(lessons, activeItems),
+    [activeItems, lessons],
+  );
+  const filteredSections = useMemo(
+    () => buildLessonVocabularySections(lessons, activeItems, searchQuery),
+    [activeItems, lessons, searchQuery],
+  );
+
+  const activeReviewSection = useMemo(
+    () => allSections.find((section) => section.id === activeReviewSectionId) ?? null,
+    [activeReviewSectionId, allSections],
+  );
+  const activeReviewItem = activeReviewSection?.items[reviewIndex] ?? null;
+
+  useEffect(() => {
+    if (!activeReviewSection) {
+      return;
+    }
+
+    if (activeReviewSection.items.length === 0) {
+      setActiveReviewSectionId(null);
+      setReviewIndex(0);
+      setReviewMeta(null);
+      return;
+    }
+
+    if (reviewIndex > activeReviewSection.items.length - 1) {
+      setReviewIndex(Math.max(activeReviewSection.items.length - 1, 0));
+    }
+  }, [activeReviewSection, reviewIndex]);
+
+  const animateCardBack = useCallback(() => {
+    Animated.spring(reviewCardPosition, {
+      toValue: { x: 0, y: 0 },
+      useNativeDriver: true,
+    }).start();
+  }, [reviewCardPosition]);
+
+  const handleReviewDecision = useCallback(
+    async (status: LearnerVocabularyStatus, direction: -1 | 1) => {
+      if (!token || !user?.id || !activeReviewItem || !activeReviewSection || isSubmittingReview) {
+        animateCardBack();
+        return;
+      }
+
+      setIsSubmittingReview(true);
+      setReviewMeta(null);
+
+      try {
+        const response = await apiClient.updateVocabularyStatus(
+          token,
+          activeReviewItem.entryId,
+          status,
+        );
+
+        const nextItems = items.map((item) =>
+          item.id === response.vocabulary.id ? response.vocabulary : item,
+        );
+        setItems(nextItems);
+        await setCachedVocabulary(user.id, nextItems);
+
+        const isLastCard = reviewIndex >= activeReviewSection.items.length - 1;
+        Animated.timing(reviewCardPosition, {
+          toValue: { x: direction * 420, y: 0 },
+          duration: 160,
+          useNativeDriver: true,
+        }).start(() => {
+          reviewCardPosition.setValue({ x: 0, y: 0 });
+          setIsSubmittingReview(false);
+          setReviewMeta(
+            status === 'MASTERED'
+              ? `"${response.vocabulary.entry.englishText}" marked as learned and removed from active vocabulary.`
+              : `"${response.vocabulary.entry.englishText}" marked for more review.`
+          );
+
+          if (isLastCard) {
+            setActiveReviewSectionId(null);
+            setReviewIndex(0);
+            return;
+          }
+
+          setReviewIndex((prev) => prev + 1);
+        });
+      } catch (err) {
+        setIsSubmittingReview(false);
+        animateCardBack();
+        if (err instanceof ApiError) {
+          setReviewMeta(err.message);
+        } else if (err instanceof Error) {
+          setReviewMeta(err.message);
+        } else {
+          setReviewMeta('Failed to update this vocabulary status.');
+        }
+      }
+    },
+    [
+      activeReviewItem,
+      activeReviewSection,
+      animateCardBack,
+      isSubmittingReview,
+      items,
+      reviewCardPosition,
+      reviewIndex,
+      token,
+      user?.id,
+    ],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gestureState) =>
+          Boolean(activeReviewItem) &&
+          !isSubmittingReview &&
+          Math.abs(gestureState.dx) > 12 &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy),
+        onPanResponderMove: Animated.event([null, { dx: reviewCardPosition.x }], {
+          useNativeDriver: false,
+        }),
+        onPanResponderRelease: (_event, gestureState) => {
+          if (gestureState.dx >= REVIEW_SWIPE_THRESHOLD) {
+            void handleReviewDecision('MASTERED', 1);
+            return;
+          }
+
+          if (gestureState.dx <= -REVIEW_SWIPE_THRESHOLD) {
+            void handleReviewDecision('REVIEWING', -1);
+            return;
+          }
+
+          animateCardBack();
+        },
+        onPanResponderTerminate: animateCardBack,
+      }),
+    [activeReviewItem, animateCardBack, handleReviewDecision, isSubmittingReview, reviewCardPosition.x],
+  );
+
+  const handleStartReview = useCallback((section: LessonVocabularySection) => {
+    setActiveReviewSectionId(section.id);
+    setReviewIndex(0);
+    setReviewMeta(null);
+    setSearchQuery('');
+    reviewCardPosition.setValue({ x: 0, y: 0 });
+  }, [reviewCardPosition]);
 
   if (!token || !user?.id) {
     return (
@@ -153,45 +333,174 @@ export function VocabularyScreen() {
     );
   }
 
+  if (activeReviewSection && activeReviewItem) {
+    const armenianTranslation =
+      activeReviewItem.entry.translations.find((translation) => translation.languageCode === 'am')
+        ?.translation ?? 'No Armenian translation yet.';
+    const progressText = `${reviewIndex + 1} / ${activeReviewSection.items.length}`;
+    const rotate = reviewCardPosition.x.interpolate({
+      inputRange: [-180, 0, 180],
+      outputRange: ['-9deg', '0deg', '9deg'],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <ScreenContainer>
+        <View style={styles.reviewHeader}>
+          <Pressable
+            onPress={() => {
+              setActiveReviewSectionId(null);
+              setReviewIndex(0);
+              setReviewMeta(null);
+              reviewCardPosition.setValue({ x: 0, y: 0 });
+            }}
+            style={styles.backButton}>
+            <Text style={styles.backButtonText}>Back to dictionary</Text>
+          </Pressable>
+          <Text style={styles.reviewLessonTitle}>{activeReviewSection.title}</Text>
+          <Text style={styles.reviewProgress}>{progressText}</Text>
+        </View>
+
+        <View style={styles.reviewHintRow}>
+          <Text style={styles.reviewHintLeft}>Swipe left: I don&apos;t remember</Text>
+          <Text style={styles.reviewHintRight}>Swipe right: Learned</Text>
+        </View>
+
+        <View style={styles.reviewDeck}>
+          <Animated.View
+            {...panResponder.panHandlers}
+            style={[
+              styles.reviewCard,
+              {
+                transform: [
+                  { translateX: reviewCardPosition.x },
+                  { translateY: reviewCardPosition.y },
+                  { rotate },
+                ],
+              },
+            ]}>
+            <Text style={styles.reviewArmenian}>{armenianTranslation}</Text>
+            <Text style={styles.reviewEnglish}>{activeReviewItem.entry.englishText}</Text>
+            <Text style={styles.reviewStatus}>{activeReviewItem.status}</Text>
+            <Text style={styles.reviewMetaText}>
+              Armenian is highlighted first. Swipe right if this word feels learned, or left if
+              you need to review it again.
+            </Text>
+            {isSubmittingReview ? <ActivityIndicator size="small" color="#0f766e" /> : null}
+          </Animated.View>
+        </View>
+
+        <View style={styles.reviewButtonsRow}>
+          <Pressable
+            disabled={isSubmittingReview}
+            onPress={() => {
+              void handleReviewDecision('REVIEWING', -1);
+            }}
+            style={[styles.reviewActionButton, styles.reviewActionButtonLeft]}>
+            <Text style={styles.reviewActionTextLeft}>I don&apos;t remember</Text>
+          </Pressable>
+          <Pressable
+            disabled={isSubmittingReview}
+            onPress={() => {
+              void handleReviewDecision('MASTERED', 1);
+            }}
+            style={[styles.reviewActionButton, styles.reviewActionButtonRight]}>
+            <Text style={styles.reviewActionTextRight}>Learned</Text>
+          </Pressable>
+        </View>
+
+        {reviewMeta ? <Text style={styles.syncMeta}>{reviewMeta}</Text> : null}
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={styles.title}>My Vocabulary</Text>
-        <Text style={styles.meta}>Select text inside lesson items and tap Add to Vocabulary.</Text>
+        <Text style={styles.meta}>
+          Saved words are grouped by lesson topic. Open a lesson section or start Check to review
+          words with swipe gestures.
+        </Text>
+        <Text style={styles.meta}>
+          Learned words leave the active vocabulary list automatically after you swipe them right.
+        </Text>
         {syncMeta ? <Text style={styles.syncMeta}>{syncMeta}</Text> : null}
+        {reviewMeta ? <Text style={styles.syncMeta}>{reviewMeta}</Text> : null}
       </View>
 
       <View style={styles.summaryRow}>
         <SummaryCard label="Total" value={summary.total} />
         <SummaryCard label="New" value={summary.NEW} />
         <SummaryCard label="Reviewing" value={summary.REVIEWING} />
-        <SummaryCard label="Mastered" value={summary.MASTERED} />
+        <SummaryCard label="Learned" value={summary.MASTERED} />
       </View>
 
+      <TextInput
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        placeholder="Search English or Armenian"
+        placeholderTextColor="#94a3b8"
+        style={styles.searchInput}
+      />
+
       <FlatList
-        data={items}
+        data={filteredSections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => {
-          const firstTranslation = item.entry.translations[0];
-          return (
-            <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.word}>{item.entry.englishText}</Text>
-                <Text style={styles.status}>{item.status}</Text>
+        renderItem={({ item }) => (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionHeadingCopy}>
+                <Text style={styles.sectionTitle}>{item.title}</Text>
+                <Text style={styles.sectionMeta}>
+                  {item.items.length} saved {item.items.length === 1 ? 'word' : 'words'}
+                </Text>
               </View>
-              <Text style={styles.translation}>
-                {firstTranslation
-                  ? `${firstTranslation.translation} (${firstTranslation.languageCode.toUpperCase()})`
-                  : 'No translation yet.'}
-              </Text>
+              <Pressable
+                onPress={() => handleStartReview(item)}
+                disabled={item.items.length === 0}
+                style={({ pressed }) => [
+                  styles.checkButton,
+                  pressed && item.items.length > 0 && styles.checkButtonPressed,
+                ]}>
+                <Text style={styles.checkButtonText}>Check</Text>
+              </Pressable>
             </View>
-          );
-        }}
+
+            {item.description ? <Text style={styles.sectionDescription}>{item.description}</Text> : null}
+
+            <View style={styles.sectionEntries}>
+              {item.items.slice(0, 6).map((entry) => {
+                const translation =
+                  entry.entry.translations.find((itemTranslation) => itemTranslation.languageCode === 'am')
+                    ?.translation ?? 'No Armenian translation yet.';
+
+                return (
+                  <View key={entry.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <Text style={styles.status}>{entry.status}</Text>
+                    </View>
+                    <Text style={styles.translationPrimary}>{translation}</Text>
+                    <Text style={styles.word}>{entry.entry.englishText}</Text>
+                  </View>
+                );
+              })}
+            </View>
+
+            {item.items.length > 6 ? (
+              <Text style={styles.moreMeta}>+{item.items.length - 6} more in this lesson</Text>
+            ) : null}
+          </View>
+        )}
         ListEmptyComponent={
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No saved vocabulary yet.</Text>
+            <Text style={styles.emptyTitle}>
+              {searchQuery.trim() ? 'No matches for this search.' : 'No saved vocabulary yet.'}
+            </Text>
             <Text style={styles.emptyText}>
-              Add vocabulary from lesson text selection.
+              {searchQuery.trim()
+                ? 'Try another English or Armenian search term.'
+                : 'Add vocabulary from lesson text selection to build lesson sections here.'}
             </Text>
           </View>
         }
@@ -257,12 +566,23 @@ const styles = StyleSheet.create({
   syncMeta: {
     color: '#0f766e',
     fontSize: 12,
-    marginTop: 4,
+    marginTop: 6,
   },
   summaryRow: {
     flexDirection: 'row',
     gap: 8,
     marginBottom: 12,
+  },
+  searchInput: {
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    borderWidth: 1,
+    color: '#0f172a',
+    fontSize: 15,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   summaryCard: {
     alignItems: 'center',
@@ -284,11 +604,62 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   listContent: {
-    gap: 10,
+    gap: 12,
     paddingBottom: 24,
   },
-  card: {
+  sectionCard: {
     backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  sectionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  sectionHeadingCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionTitle: {
+    color: '#0f172a',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  sectionMeta: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  sectionDescription: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  checkButton: {
+    backgroundColor: '#0f766e',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  checkButtonPressed: {
+    opacity: 0.85,
+  },
+  checkButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  sectionEntries: {
+    gap: 8,
+  },
+  card: {
+    backgroundColor: '#f8fafc',
     borderColor: '#dbeafe',
     borderRadius: 12,
     borderWidth: 1,
@@ -298,11 +669,11 @@ const styles = StyleSheet.create({
   cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
   },
   word: {
     color: '#0f172a',
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
   },
   status: {
@@ -315,9 +686,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  translation: {
-    color: '#334155',
-    fontSize: 14,
+  translationPrimary: {
+    color: '#0f766e',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  moreMeta: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '600',
   },
   emptyCard: {
     alignItems: 'center',
@@ -336,6 +713,121 @@ const styles = StyleSheet.create({
   emptyText: {
     color: '#475569',
     fontSize: 13,
+    textAlign: 'center',
+  },
+  reviewHeader: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  backButtonText: {
+    color: '#0f766e',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  reviewLessonTitle: {
+    color: '#0f172a',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  reviewProgress: {
+    color: '#64748b',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  reviewHintRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  reviewHintLeft: {
+    color: '#b45309',
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  reviewHintRight: {
+    color: '#0f766e',
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  reviewDeck: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  reviewCard: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 12,
+    maxWidth: 420,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    width: '100%',
+  },
+  reviewArmenian: {
+    color: '#0f766e',
+    fontSize: 28,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  reviewEnglish: {
+    color: '#0f172a',
+    fontSize: 32,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  reviewStatus: {
+    color: '#64748b',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  reviewMetaText: {
+    color: '#475569',
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  reviewButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reviewActionButton: {
+    borderRadius: 14,
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reviewActionButtonLeft: {
+    backgroundColor: '#fff7ed',
+    borderColor: '#fdba74',
+    borderWidth: 1,
+  },
+  reviewActionButtonRight: {
+    backgroundColor: '#ecfeff',
+    borderColor: '#99f6e4',
+    borderWidth: 1,
+  },
+  reviewActionTextLeft: {
+    color: '#b45309',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  reviewActionTextRight: {
+    color: '#0f766e',
+    fontSize: 14,
+    fontWeight: '700',
     textAlign: 'center',
   },
 });

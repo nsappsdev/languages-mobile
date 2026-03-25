@@ -1,6 +1,7 @@
 import { API_BASE_URL } from '@/src/config/env';
 import type {
   LearnerVocabularyItem,
+  LearnerVocabularyStatus,
   Lesson,
   LoginResponse,
   ProgressEvent,
@@ -188,9 +189,27 @@ export const apiClient = {
   },
 
   getVocabularyEntries(token: string) {
-    return request<{ entries: VocabularyEntry[] }>('/vocabulary', {
+    return request<{
+      entries: VocabularyEntry[];
+      page: number;
+      pageSize: number;
+      total: number;
+      pageCount: number;
+    }>('/vocabulary?page=1&pageSize=10', {
       method: 'GET',
       token,
+    });
+  },
+
+  lookupVocabularyEntries(token: string, items: string[]) {
+    return request<{
+      entries: VocabularyEntry[];
+      resolved: number;
+      requested: number;
+    }>('/vocabulary/lookup', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ items }),
     });
   },
 
@@ -228,6 +247,14 @@ export const apiClient = {
     return request<{ message?: string }>(`/me/vocabulary/${entryId}`, {
       method: 'DELETE',
       token,
+    });
+  },
+
+  updateVocabularyStatus(token: string, entryId: string, status: LearnerVocabularyStatus) {
+    return request<{ vocabulary: LearnerVocabularyItem }>(`/me/vocabulary/${entryId}`, {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify({ status }),
     });
   },
 
