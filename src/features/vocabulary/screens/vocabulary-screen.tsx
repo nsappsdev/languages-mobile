@@ -157,7 +157,7 @@ export function VocabularyScreen() {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={styles.title}>My Vocabulary</Text>
-        <Text style={styles.meta}>Select text inside task prompts and tap Add to Vocabulary.</Text>
+        <Text style={styles.meta}>Select text inside lesson items and tap Add to Vocabulary.</Text>
         {syncMeta ? <Text style={styles.syncMeta}>{syncMeta}</Text> : null}
       </View>
 
@@ -191,7 +191,7 @@ export function VocabularyScreen() {
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No saved vocabulary yet.</Text>
             <Text style={styles.emptyText}>
-              Add vocabulary from task prompt text selection.
+              Add vocabulary from lesson text selection.
             </Text>
           </View>
         }

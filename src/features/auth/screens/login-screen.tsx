@@ -62,7 +62,7 @@ export function LoginScreen() {
         style={styles.keyboardView}>
         <View style={styles.header}>
           <Text style={styles.title}>Language App</Text>
-          <Text style={styles.subtitle}>Sign in to access lessons and task runner.</Text>
+          <Text style={styles.subtitle}>Sign in to access lessons and audio playback.</Text>
         </View>
 
         <View style={styles.form}>

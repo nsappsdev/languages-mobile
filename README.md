@@ -52,6 +52,10 @@ Expo Router mobile client for the task-based language learning MVP.
   ```bash
   npm run build:android:store
   ```
+- Android Play Internal Testing submit:
+  ```bash
+  npm run submit:android:internal
+  ```
 - iOS production archive (`.ipa`):
   ```bash
   npm run build:ios:production
@@ -60,6 +64,10 @@ Expo Router mobile client for the task-based language learning MVP.
   ```bash
   npm run build:all:production
   ```
+
+For the full Android internal testing rollout checklist, see `../docs/deployment.md`.
+
+Current EAS production build base URL is pinned in `eas.json` to `http://138.68.76.47/api` for client testing. Replace it when the backend moves to the final HTTPS domain.
 
 ## Tests
 

@@ -14,6 +14,7 @@
     "test:coverage": "jest --coverage --runInBand",
     "build:android:production": "npx eas build --platform android --profile production",
     "build:android:store": "npx eas build --platform android --profile production-store",
+    "submit:android:internal": "npx eas submit --platform android --profile production-store",
     "build:ios:production": "npx eas build --platform ios --profile production",
     "build:all:production": "npx eas build --platform all --profile production"
   },
@@ -24,7 +25,9 @@
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
     "expo": "~54.0.33",
+    "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.13",
+    "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.11",
     "expo-haptics": "~15.0.8",
     "expo-image": "~3.0.11",

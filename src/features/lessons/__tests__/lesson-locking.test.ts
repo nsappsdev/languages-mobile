@@ -24,7 +24,7 @@ function createLesson(input: {
     status: 'PUBLISHED',
     createdAt: input.createdAt,
     updatedAt: input.createdAt,
-    tasks: [],
+    items: [],
   };
 }
 

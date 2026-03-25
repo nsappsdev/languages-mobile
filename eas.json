@@ -1,9 +1,13 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "production": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
+      },
       "android": {
         "buildType": "apk"
       },
@@ -12,8 +16,19 @@
       }
     },
     "production-store": {
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
+      },
+      "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production-store": {
+      "android": {
+        "track": "internal"
       }
     }
   }

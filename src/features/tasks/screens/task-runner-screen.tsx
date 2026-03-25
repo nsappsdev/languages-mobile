@@ -1,34 +1,40 @@
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { resolveApiAssetUrl } from '@/src/config/env';
 import { getLessonAccess } from '@/src/features/lessons/lesson-locking';
 import {
   markLessonCompleted,
   setActiveLesson,
 } from '@/src/features/lessons/progression-storage';
 import { flushProgressQueue, queueProgressEvents } from '@/src/features/progress/progress-sync';
+import {
+  ensureAudioCached,
+  prefetchAudio,
+} from '@/src/features/tasks/services/audio-cache';
+import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
 import { addSelectionToVocabulary } from '@/src/features/vocabulary/services/add-word-to-vocabulary';
+import {
+  getCachedVocabulary,
+  mergeCachedVocabulary,
+  removeCachedVocabulary,
+} from '@/src/features/vocabulary/services/vocabulary-sync';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import type { Lesson, ProgressEvent, Task } from '@/src/types/domain';
+import type { LearnerVocabularyItem, Lesson, ProgressEvent } from '@/src/types/domain';
 
 interface TaskRunnerScreenProps {
   lessonId: string;
-}
-
-interface TaskFeedback {
-  isCorrect: boolean;
-  message: string;
 }
 
 export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
@@ -37,32 +43,20 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-  const [typedAnswer, setTypedAnswer] = useState('');
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<TaskFeedback | null>(null);
-  const [firstAttemptResults, setFirstAttemptResults] = useState<Record<string, boolean>>({});
-  const [completedTaskIds, setCompletedTaskIds] = useState<Record<string, true>>({});
-  const [attemptCounts, setAttemptCounts] = useState<Record<string, number>>({});
+  const [currentItemIndex, setCurrentItemIndex] = useState(0);
+  const [completedItemIds, setCompletedItemIds] = useState<Record<string, true>>({});
   const [syncError, setSyncError] = useState<string | null>(null);
   const [vocabularyNotice, setVocabularyNotice] = useState<string | null>(null);
-  const [selectedPromptText, setSelectedPromptText] = useState('');
-  const [promptSelection, setPromptSelection] = useState({ start: 0, end: 0 });
-  const [isSavingVocabulary, setIsSavingVocabulary] = useState(false);
-  const promptInputRef = useRef<TextInput | null>(null);
-  const addButtonPressInRef = useRef(false);
-  const latestSelectionRef = useRef('');
-
-  const clearPromptSelection = useCallback(() => {
-    if (addButtonPressInRef.current || isSavingVocabulary) {
-      return;
-    }
-
-    latestSelectionRef.current = '';
-    setSelectedPromptText('');
-    setPromptSelection({ start: 0, end: 0 });
-    promptInputRef.current?.blur();
-  }, [isSavingVocabulary]);
+  const [vocabularyByText, setVocabularyByText] = useState<Record<string, LearnerVocabularyItem>>(
+    {},
+  );
+  const [pendingWords, setPendingWords] = useState<Record<string, true>>({});
+  const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
+  const [isAudioCaching, setIsAudioCaching] = useState(false);
+  const startedItemIdsRef = useRef<Set<string>>(new Set());
+  const handleGoToDashboard = useCallback(() => {
+    router.replace('/(tabs)/lessons');
+  }, [router]);
 
   useEffect(() => {
     if (!token || !lessonId) {
@@ -102,71 +96,58 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   }, [lessonId, token, user?.id]);
 
   useEffect(() => {
+    if (!token || !user?.id) {
+      setVocabularyByText({});
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadVocabulary = async () => {
+      const cached = await getCachedVocabulary(user.id);
+      if (!cancelled) {
+        setVocabularyByText(createVocabularyLookup(cached));
+      }
+
+      try {
+        const response = await apiClient.getMyVocabulary(token);
+        await mergeCachedVocabulary(user.id, response.vocabulary);
+        if (!cancelled) {
+          setVocabularyByText(createVocabularyLookup(response.vocabulary));
+        }
+      } catch {
+        // Keep cached state if refresh fails.
+      }
+    };
+
+    loadVocabulary().catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, user?.id]);
+
+  useEffect(() => {
     if (!user?.id || !lessonId) return;
     void setActiveLesson(user.id, lessonId);
   }, [lessonId, user?.id]);
 
-  const tasks = useMemo(
-    () => (lesson ? [...lesson.tasks].sort((left, right) => left.order - right.order) : []),
+  const items = useMemo(
+    () => (lesson ? [...lesson.items].sort((left, right) => left.order - right.order) : []),
     [lesson],
   );
 
-  const currentTask = tasks[currentTaskIndex];
+  const currentItem = items[currentItemIndex];
+  const currentAudioUrl = useMemo(
+    () => (currentItem?.audioUrl ? resolveApiAssetUrl(currentItem.audioUrl) : null),
+    [currentItem?.audioUrl],
+  );
+  const player = useAudioPlayer(playableAudioUrl ?? undefined, { updateInterval: 200 });
+  const playbackStatus = useAudioPlayerStatus(player);
 
   useEffect(() => {
-    setTypedAnswer('');
-    setSelectedOptionId(null);
-    setFeedback(null);
-    setSelectedPromptText('');
-    setPromptSelection({ start: 0, end: 0 });
     setVocabularyNotice(null);
-  }, [currentTaskIndex]);
-
-  const progressText = `${Math.min(currentTaskIndex + 1, Math.max(tasks.length, 1))} / ${Math.max(tasks.length, 1)}`;
-
-  const queueProgressEvent = useCallback(
-    (event: Omit<ProgressEvent, 'idempotencyKey' | 'clientTimestamp'>) => {
-      if (!token) return;
-      void queueProgressEvents([{
-        ...event,
-        idempotencyKey: createIdempotencyKey(event.eventType, event.lessonId, event.taskId),
-        clientTimestamp: new Date().toISOString(),
-      }]).then((result) => {
-        if (!result.ok) {
-          setSyncError(result.message ?? 'Progress sync is pending. We will retry automatically.');
-          return;
-        }
-        if (result.pending === 0) {
-          setSyncError(null);
-        }
-      });
-    },
-    [token],
-  );
-
-  const handleAddSelectionToVocabulary = useCallback(async () => {
-    const selectionToAdd = (latestSelectionRef.current || selectedPromptText).trim();
-    if (!selectionToAdd) {
-      return;
-    }
-
-    if (!token || !user?.id) {
-      setVocabularyNotice('Sign in to add words to vocabulary.');
-      return;
-    }
-
-    setIsSavingVocabulary(true);
-    try {
-      const result = await addSelectionToVocabulary(token, user.id, selectionToAdd);
-      setVocabularyNotice(result.message);
-      if (result.ok) {
-        clearPromptSelection();
-      }
-    } finally {
-      addButtonPressInRef.current = false;
-      setIsSavingVocabulary(false);
-    }
-  }, [clearPromptSelection, selectedPromptText, token, user?.id]);
+  }, [currentItemIndex]);
 
   useEffect(() => {
     if (!token) return;
@@ -175,63 +156,199 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     };
   }, [token]);
 
-  const submit = () => {
-    if (!currentTask) return;
-
-    const answer = getAnswerValue(currentTask.type, selectedOptionId, typedAnswer);
-    if (!answer) {
-      setFeedback({
-        isCorrect: false,
-        message: 'Please select or enter an answer first.',
-      });
+  useEffect(() => {
+    if (!currentAudioUrl) {
+      setPlayableAudioUrl(null);
+      setIsAudioCaching(false);
       return;
     }
 
-    const attemptNumber = (attemptCounts[currentTask.id] ?? 0) + 1;
-    setAttemptCounts((prev) => ({ ...prev, [currentTask.id]: attemptNumber }));
+    let cancelled = false;
 
-    const result = evaluateAnswer(currentTask, answer);
-    if (firstAttemptResults[currentTask.id] === undefined) {
-      setFirstAttemptResults((prev) => ({ ...prev, [currentTask.id]: result.isCorrect }));
+    const cacheAudio = async () => {
+      setPlayableAudioUrl(currentAudioUrl);
+      setIsAudioCaching(true);
+
+      const cachedUri = await ensureAudioCached(currentAudioUrl).catch(() => currentAudioUrl);
+      if (!cancelled) {
+        setPlayableAudioUrl(cachedUri);
+        setIsAudioCaching(false);
+      }
+
+      const nextItem = items[currentItemIndex + 1];
+      if (nextItem?.audioUrl) {
+        void prefetchAudio(resolveApiAssetUrl(nextItem.audioUrl));
+      }
+    };
+
+    cacheAudio().catch(() => {
+      if (!cancelled) {
+        setPlayableAudioUrl(currentAudioUrl);
+        setIsAudioCaching(false);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentAudioUrl, currentItemIndex, items]);
+
+  const progressText = `${Math.min(currentItemIndex + 1, Math.max(items.length, 1))} / ${Math.max(items.length, 1)}`;
+
+  const queueProgressEvent = useCallback(
+    (event: Omit<ProgressEvent, 'idempotencyKey' | 'clientTimestamp'>) => {
+      if (!token) return;
+      void queueProgressEvents([
+        {
+          ...event,
+          idempotencyKey: createIdempotencyKey(
+            event.eventType,
+            event.lessonId,
+            event.lessonItemId,
+          ),
+          clientTimestamp: new Date().toISOString(),
+        },
+      ]).then((result) => {
+        if (!result.ok) {
+          setSyncError(result.message ?? 'Progress sync is pending. We will retry automatically.');
+          return;
+        }
+
+        if (result.pending === 0) {
+          setSyncError(null);
+        }
+      });
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    if (!currentItem) {
+      return;
     }
 
+    if (startedItemIdsRef.current.has(currentItem.id)) {
+      return;
+    }
+
+    startedItemIdsRef.current.add(currentItem.id);
     queueProgressEvent({
       lessonId,
-      taskId: currentTask.id,
-      eventType: 'TASK_ATTEMPT',
-      attemptNumber,
-      isCorrect: result.isCorrect,
+      lessonItemId: currentItem.id,
+      eventType: 'ITEM_STARTED',
+      completion: calculateCompletion(completedItemIds, items.length),
       payload: {
-        taskType: currentTask.type,
+        order: currentItem.order,
       },
     });
+  }, [completedItemIds, currentItem, items.length, lessonId, queueProgressEvent]);
 
-    setFeedback(result);
-  };
+  const activeSegmentId = useMemo(() => {
+    if (!currentItem) {
+      return null;
+    }
 
-  const completeCurrentTaskAndContinue = async (isCorrect: boolean) => {
-    if (!currentTask) return;
-    const updatedCompleted = { ...completedTaskIds, [currentTask.id]: true as const };
-    const completion = calculateCompletion(updatedCompleted, tasks.length);
+    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
+    const activeSegment = currentItem.segments.find(
+      (segment) => currentPositionMs >= segment.startMs && currentPositionMs < segment.endMs,
+    );
 
+    return activeSegment?.id ?? null;
+  }, [currentItem, playbackStatus.currentTime]);
+
+  const wordTokens = useMemo(
+    () => (currentItem ? tokenizeLessonText(currentItem.text) : []),
+    [currentItem],
+  );
+
+  const startPlayback = useCallback(async () => {
+    const duration = playbackStatus.duration ?? 0;
+    const currentTime = playbackStatus.currentTime ?? 0;
+    const didReachEnd =
+      playbackStatus.didJustFinish ||
+      (duration > 0 && currentTime >= Math.max(duration - 0.05, 0));
+
+    if (didReachEnd) {
+      await player.seekTo(0);
+    }
+
+    player.play();
+  }, [playbackStatus.currentTime, playbackStatus.didJustFinish, playbackStatus.duration, player]);
+
+  const handleTogglePlayback = useCallback(() => {
+    if (!playableAudioUrl) {
+      setVocabularyNotice('This item does not have a playable audio source yet.');
+      return;
+    }
+
+    setVocabularyNotice(null);
+    if (playbackStatus.playing) {
+      player.pause();
+      return;
+    }
+
+    void startPlayback();
+  }, [playableAudioUrl, playbackStatus.playing, player, startPlayback]);
+
+  const handleReplay = useCallback(() => {
+    if (!playableAudioUrl) {
+      return;
+    }
+
+    setVocabularyNotice(null);
+    void player.seekTo(0).then(() => {
+      player.play();
+    });
+  }, [playableAudioUrl, player]);
+
+  const completeCurrentItem = useCallback(() => {
+    if (!currentItem || completedItemIds[currentItem.id]) {
+      return completedItemIds;
+    }
+
+    const nextCompleted = { ...completedItemIds, [currentItem.id]: true as const };
     queueProgressEvent({
       lessonId,
-      taskId: currentTask.id,
-      eventType: 'TASK_COMPLETED',
-      isCorrect,
-      completion,
+      lessonItemId: currentItem.id,
+      eventType: 'ITEM_COMPLETED',
+      completion: calculateCompletion(nextCompleted, items.length),
+      payload: {
+        listenedSeconds: Number((playbackStatus.currentTime ?? 0).toFixed(2)),
+      },
     });
+    setCompletedItemIds(nextCompleted);
+    return nextCompleted;
+  }, [
+    completedItemIds,
+    currentItem,
+    items.length,
+    lessonId,
+    playbackStatus.currentTime,
+    queueProgressEvent,
+  ]);
 
-    setCompletedTaskIds(updatedCompleted);
+  const handleGoPrevious = useCallback(() => {
+    if (currentItemIndex === 0) {
+      return;
+    }
 
-    if (currentTaskIndex === tasks.length - 1) {
-      const score = calculateScore(firstAttemptResults, updatedCompleted, tasks.length);
-      const lessonCompletion = calculateCompletion(updatedCompleted, tasks.length);
+    player.pause();
+    setCurrentItemIndex((prev) => prev - 1);
+  }, [currentItemIndex, player]);
 
+  const handleGoNext = useCallback(async () => {
+    if (!currentItem) {
+      return;
+    }
+
+    player.pause();
+    const updatedCompleted = completeCurrentItem();
+
+    if (currentItemIndex === items.length - 1) {
+      const lessonCompletion = calculateCompletion(updatedCompleted, items.length);
       queueProgressEvent({
         lessonId,
         eventType: 'LESSON_COMPLETED',
-        score,
         completion: lessonCompletion,
       });
 
@@ -252,32 +369,94 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         pathname: '/results/[lessonId]',
         params: {
           lessonId,
-          score: String(score),
-          total: String(tasks.length),
+          items: String(items.length),
           completion: String(lessonCompletion),
         },
       });
       return;
     }
 
-    setCurrentTaskIndex((prev) => prev + 1);
-  };
+    setCurrentItemIndex((prev) => prev + 1);
+  }, [
+    completeCurrentItem,
+    currentItem,
+    currentItemIndex,
+    items.length,
+    lessonId,
+    player,
+    queueProgressEvent,
+    router,
+    user?.id,
+  ]);
 
-  const skipCurrentTask = () => {
-    if (!currentTask) return;
+  const handleToggleWordVocabulary = useCallback(
+    async (rawWord: string, normalizedWord: string | null) => {
+      if (!normalizedWord || !token || !user?.id) {
+        return;
+      }
 
-    if (firstAttemptResults[currentTask.id] === undefined) {
-      setFirstAttemptResults((prev) => ({ ...prev, [currentTask.id]: false }));
-    }
+      if (pendingWords[normalizedWord]) {
+        return;
+      }
 
-    void completeCurrentTaskAndContinue(false);
-  };
+      setPendingWords((prev) => ({ ...prev, [normalizedWord]: true }));
+      try {
+        const existingItem = vocabularyByText[normalizedWord];
+
+        if (existingItem) {
+          try {
+            await apiClient.removeVocabularyFromLearner(token, existingItem.entryId);
+          } catch (error) {
+            if (!(error instanceof ApiError) || error.status !== 404) {
+              throw error;
+            }
+          }
+
+          await removeCachedVocabulary(user.id, existingItem.entryId);
+          setVocabularyByText((prev) => {
+            const next = { ...prev };
+            delete next[normalizedWord];
+            return next;
+          });
+          setVocabularyNotice(`Removed "${existingItem.entry.englishText}" from vocabulary.`);
+          return;
+        }
+
+        const result = await addSelectionToVocabulary(token, user.id, rawWord);
+        if (result.ok && result.vocabulary) {
+          const addedVocabulary = result.vocabulary;
+          setVocabularyByText((prev) => ({
+            ...prev,
+            [addedVocabulary.entry.englishText.toLowerCase()]: addedVocabulary,
+          }));
+        }
+        setVocabularyNotice(result.message);
+      } catch (error) {
+        setVocabularyNotice(
+          error instanceof Error
+            ? error.message
+            : 'Failed to update learner vocabulary for this word.',
+        );
+      } finally {
+        setPendingWords((prev) => {
+          const next = { ...prev };
+          delete next[normalizedWord];
+          return next;
+        });
+      }
+    },
+    [pendingWords, token, user?.id, vocabularyByText],
+  );
 
   if (!token) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
-          <Text style={styles.meta}>Sign in to run tasks.</Text>
+          <Text style={styles.meta}>Sign in to play lesson audio.</Text>
         </View>
       </ScreenContainer>
     );
@@ -286,6 +465,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   if (isLoading) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
           <ActivityIndicator size="large" />
           <Text style={styles.meta}>Preparing lesson...</Text>
@@ -294,432 +477,395 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     );
   }
 
-  if (error || !lesson || !currentTask) {
+  if (error || !lesson || !currentItem) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
-          <Text style={styles.error}>{error ?? 'Unable to load task runner.'}</Text>
+          <Text style={styles.error}>{error ?? 'Unable to load lesson player.'}</Text>
         </View>
       </ScreenContainer>
     );
   }
 
-  const showNext = Boolean(feedback?.isCorrect);
+  const completion = calculateCompletion(completedItemIds, items.length);
+  const durationSeconds = playbackStatus.duration ?? 0;
+  const currentSeconds = playbackStatus.currentTime ?? 0;
+  const audioSourceLabel = playableAudioUrl?.startsWith('file://') ? 'Cached on device' : 'Streaming';
 
   return (
     <ScreenContainer scroll>
-      <TouchableWithoutFeedback onPress={clearPromptSelection} accessible={false}>
-        <View>
-          <View style={styles.header}>
+      <View>
+        <View style={styles.header}>
+          <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+            <Ionicons name="chevron-back" size={18} color="#0f766e" />
+            <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+          </Pressable>
+          <View style={styles.headerTitleRow}>
             <Text style={styles.title}>{lesson.title}</Text>
             <Text style={styles.progress}>{progressText}</Text>
           </View>
+        </View>
 
-          <View style={styles.card}>
-            <Text style={styles.taskType}>{currentTask.type}</Text>
-            <TextInput
-              ref={promptInputRef}
-              key={`${currentTask.id}:${currentTask.prompt}`}
-              contextMenuHidden={false}
-              editable
-              defaultValue={currentTask.prompt}
-              multiline
-              onSelectionChange={(event) => {
-                const nextSelection = {
-                  start: event.nativeEvent.selection.start,
-                  end: event.nativeEvent.selection.end,
-                };
-                setPromptSelection(nextSelection);
-                const selectedText = extractSelectionText(
-                  currentTask.prompt,
-                  nextSelection.start,
-                  nextSelection.end,
-                );
-                if (selectedText) {
-                  latestSelectionRef.current = selectedText;
-                  setSelectedPromptText(selectedText);
-                  return;
-                }
-
-                if (!addButtonPressInRef.current) {
-                  latestSelectionRef.current = '';
-                  setSelectedPromptText('');
-                }
-              }}
-              onBlur={clearPromptSelection}
-              scrollEnabled={false}
-              selection={promptSelection}
-              selectTextOnFocus={false}
-              showSoftInputOnFocus={false}
-              style={styles.promptInput}
-            />
-            <Text style={styles.promptHint}>
-              Select any part of the task text, then tap Add to Vocabulary.
-            </Text>
-            {shouldShowAddToVocabularyButton(selectedPromptText) ? (
-              <Pressable
-                onPressIn={() => {
-                  addButtonPressInRef.current = true;
-                  latestSelectionRef.current = selectedPromptText.trim();
-                }}
-                onPressOut={() => {
-                  addButtonPressInRef.current = false;
-                }}
-                onPress={() => {
-                  void handleAddSelectionToVocabulary();
-                }}
-                style={({ pressed }) => [
-                  styles.addVocabularyButton,
-                  isSavingVocabulary && styles.addVocabularyButtonDisabled,
-                  pressed && !isSavingVocabulary && styles.addVocabularyButtonPressed,
-                ]}
-                disabled={isSavingVocabulary}>
-                <Text style={styles.addVocabularyButtonText}>
-                  {isSavingVocabulary ? 'Saving...' : 'Add to Vocabulary'}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          {renderAnswerInput({
-            task: currentTask,
-            selectedOptionId,
-            setSelectedOptionId,
-            typedAnswer,
-            setTypedAnswer,
-          })}
-
-          {feedback ? (
-            <View style={[styles.feedback, feedback.isCorrect ? styles.feedbackGood : styles.feedbackBad]}>
-              <Text style={styles.feedbackText}>{feedback.message}</Text>
-            </View>
-          ) : null}
-
-          {syncError ? (
-            <View style={styles.syncNotice}>
-              <Text style={styles.syncNoticeText}>{syncError}</Text>
-            </View>
-          ) : null}
-
-          {vocabularyNotice ? (
-            <View style={styles.vocabularyNotice}>
-              <Text style={styles.vocabularyNoticeText}>{vocabularyNotice}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.actions}>
-            <PrimaryButton title="Submit" onPress={submit} />
-
-            {showNext ? (
-              <PrimaryButton
-                title={currentTaskIndex === tasks.length - 1 ? 'Finish Lesson' : 'Next Task'}
-                onPress={() => void completeCurrentTaskAndContinue(true)}
-              />
-            ) : (
-              <Pressable onPress={skipCurrentTask} style={styles.skipButton}>
-                <Text style={styles.skipText}>Skip Task</Text>
-              </Pressable>
-            )}
+        <View style={styles.overviewCard}>
+          <Text style={styles.overviewLabel}>Lesson Progress</Text>
+          <Text style={styles.overviewValue}>{completion}% complete</Text>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${completion}%` }]} />
           </View>
         </View>
-      </TouchableWithoutFeedback>
+
+        <View style={styles.card}>
+          <Text style={styles.itemLabel}>Item {currentItemIndex + 1}</Text>
+          {currentItem.segments.length ? (
+            <View style={styles.segmentInlineWrap}>
+              {currentItem.segments.map((segment) => {
+                const isActive = segment.id === activeSegmentId;
+                return (
+                  <View
+                    key={segment.id}
+                    style={[styles.segmentInlineChip, isActive && styles.segmentInlineChipActive]}>
+                    <Text style={[styles.segmentInlineText, isActive && styles.segmentInlineTextActive]}>
+                      {segment.text}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <Text style={styles.itemText}>{currentItem.text}</Text>
+          )}
+
+          <View style={styles.audioMetaRow}>
+            <Text style={styles.audioMeta}>
+              {isAudioCaching ? 'Caching audio…' : playableAudioUrl ? audioSourceLabel : 'No audio'}
+            </Text>
+            <Text style={styles.audioMeta}>
+              {formatSeconds(currentSeconds)} / {formatSeconds(durationSeconds)}
+            </Text>
+          </View>
+
+          <View style={styles.audioActions}>
+            <Pressable
+              onPress={handleTogglePlayback}
+              disabled={!playableAudioUrl}
+              accessibilityRole="button"
+              accessibilityLabel={playbackStatus.playing ? 'Pause audio' : 'Play audio'}
+              style={({ pressed }) => [
+                styles.audioIconButton,
+                !playableAudioUrl && styles.audioIconButtonDisabled,
+                pressed && playableAudioUrl && styles.audioIconButtonPressed,
+              ]}>
+              <Ionicons
+                name={playbackStatus.playing ? 'pause' : 'play'}
+                size={24}
+                color="#ffffff"
+              />
+            </Pressable>
+            <Pressable
+              onPress={handleReplay}
+              disabled={!playableAudioUrl}
+              accessibilityRole="button"
+              accessibilityLabel="Replay audio"
+              style={({ pressed }) => [
+                styles.audioIconButtonSecondary,
+                !playableAudioUrl && styles.audioIconButtonDisabled,
+                pressed && playableAudioUrl && styles.audioIconButtonPressed,
+              ]}>
+              <Ionicons name="refresh" size={22} color="#0f766e" />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.selectionCard}>
+          <Text style={styles.sectionTitle}>Tap Words To Save Or Remove</Text>
+          <Text style={styles.sectionMeta}>
+            Tap a word once to add it to learner vocabulary. Tap it again to remove it.
+          </Text>
+
+          <Text style={styles.wordFlow}>
+            {wordTokens.map((token) => {
+              if (!token.normalized) {
+                return token.text;
+              }
+
+              const isSelected = Boolean(vocabularyByText[token.normalized]);
+              const isPending = Boolean(pendingWords[token.normalized]);
+              return (
+                <Text
+                  key={token.key}
+                  onPress={() => {
+                    void handleToggleWordVocabulary(token.text, token.normalized);
+                  }}
+                  style={[
+                    styles.wordToken,
+                    isSelected && styles.wordTokenSelected,
+                    isPending && styles.wordTokenPending,
+                  ]}>
+                  {token.text}
+                </Text>
+              );
+            })}
+          </Text>
+
+          {vocabularyNotice ? <Text style={styles.notice}>{vocabularyNotice}</Text> : null}
+        </View>
+
+        {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
+
+        <View style={styles.navigationRow}>
+          <PrimaryButton
+            title="Previous"
+            variant="secondary"
+            onPress={handleGoPrevious}
+            disabled={currentItemIndex === 0}
+          />
+          <PrimaryButton
+            title={currentItemIndex === items.length - 1 ? 'Finish Lesson' : 'Next Item'}
+            onPress={() => {
+              void handleGoNext();
+            }}
+          />
+        </View>
+      </View>
     </ScreenContainer>
   );
 }
 
-function renderAnswerInput({
-  task,
-  selectedOptionId,
-  setSelectedOptionId,
-  typedAnswer,
-  setTypedAnswer,
-}: {
-  task: Task;
-  selectedOptionId: string | null;
-  setSelectedOptionId: (value: string | null) => void;
-  typedAnswer: string;
-  setTypedAnswer: (value: string) => void;
-}) {
-  if (task.type === 'PICK_ONE' || task.type === 'MATCH' || task.type === 'LISTENING_TEXT') {
-    return (
-      <View style={styles.options}>
-        {task.options.map((option) => (
-          <Pressable
-            key={option.id}
-            onPress={() => setSelectedOptionId(option.id)}
-            style={[
-              styles.optionButton,
-              selectedOptionId === option.id && styles.optionButtonSelected,
-            ]}>
-            <Text
-              style={[
-                styles.optionText,
-                selectedOptionId === option.id && styles.optionTextSelected,
-              ]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    );
+function createVocabularyLookup(items: LearnerVocabularyItem[]) {
+  return items.reduce<Record<string, LearnerVocabularyItem>>((acc, item) => {
+    acc[item.entry.englishText.trim().toLowerCase()] = item;
+    return acc;
+  }, {});
+}
+
+function calculateCompletion(completedItemIds: Record<string, true>, totalItems: number) {
+  if (!totalItems) {
+    return 0;
   }
 
-  return (
-    <TextInput
-      autoCapitalize="none"
-      onChangeText={setTypedAnswer}
-      placeholder="Type your answer"
-      style={styles.input}
-      value={typedAnswer}
-    />
-  );
+  return Math.round((Object.keys(completedItemIds).length / totalItems) * 100);
 }
 
-function getAnswerValue(type: Task['type'], selectedOptionId: string | null, typedAnswer: string) {
-  if (type === 'PICK_ONE' || type === 'MATCH' || type === 'LISTENING_TEXT') {
-    return selectedOptionId?.trim() ?? '';
-  }
-  return typedAnswer.trim();
+function createIdempotencyKey(eventType: string, lessonId: string, lessonItemId?: string) {
+  return `${eventType}:${lessonId}:${lessonItemId ?? 'lesson'}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function evaluateAnswer(task: Task, answer: string): TaskFeedback {
-  if (task.type === 'PICK_ONE' || task.type === 'MATCH' || task.type === 'LISTENING_TEXT') {
-    const correctOption = task.options.find((option) => option.isCorrect);
-    const isCorrect = Boolean(correctOption && correctOption.id === answer);
-    return {
-      isCorrect,
-      message: isCorrect
-        ? 'Correct. Great job.'
-        : `Not quite. Correct answer: ${correctOption?.label ?? 'N/A'}`,
-    };
+function formatSeconds(value: number) {
+  if (!Number.isFinite(value) || value < 0) {
+    return '0:00';
   }
 
-  const configAnswers = Array.isArray(task.config.correctAnswers)
-    ? task.config.correctAnswers
-    : [];
-  const normalizedAnswer = normalizeText(answer);
-  const normalizedExpected = configAnswers.map((candidate) => normalizeText(candidate));
-  const isCorrect = normalizedExpected.includes(normalizedAnswer);
-
-  return {
-    isCorrect,
-    message: isCorrect
-      ? 'Correct. Great job.'
-      : `Try again. Accepted answers: ${configAnswers.join(', ') || 'N/A'}`,
-  };
-}
-
-function normalizeText(value: string) {
-  return value.trim().toLowerCase();
-}
-
-function calculateScore(
-  firstAttemptResults: Record<string, boolean>,
-  completedTaskIds: Record<string, true>,
-  totalTasks: number,
-) {
-  if (totalTasks === 0) return 0;
-
-  const firstAttemptCorrectCount = Object.entries(firstAttemptResults).filter(
-    ([taskId, result]) => result && completedTaskIds[taskId],
-  ).length;
-
-  return Math.round((firstAttemptCorrectCount / totalTasks) * 100);
-}
-
-function calculateCompletion(completedTaskIds: Record<string, true>, totalTasks: number) {
-  if (totalTasks === 0) return 0;
-  return Math.round((Object.keys(completedTaskIds).length / totalTasks) * 100);
-}
-
-function createIdempotencyKey(eventType: string, lessonId: string, taskId?: string) {
-  return `${eventType}:${lessonId}:${taskId ?? 'lesson'}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`;
-}
-
-export function extractSelectionText(source: string, start: number, end: number) {
-  if (end <= start) {
-    return '';
-  }
-
-  return source.slice(start, end).replace(/\s+/g, ' ').trim();
-}
-
-export function shouldShowAddToVocabularyButton(selectedPromptText: string) {
-  return selectedPromptText.trim().length > 0;
+  const wholeSeconds = Math.floor(value);
+  const minutes = Math.floor(wholeSeconds / 60);
+  const seconds = wholeSeconds % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     flex: 1,
-    gap: 10,
+    gap: 12,
     justifyContent: 'center',
   },
   header: {
+    gap: 8,
+    marginBottom: 12,
+  },
+  dashboardLink: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  dashboardLinkText: {
+    color: '#0f766e',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  headerTitleRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
+    gap: 8,
   },
   title: {
     color: '#0f172a',
     flex: 1,
-    fontSize: 22,
+    fontSize: 26,
     fontWeight: '700',
-    marginRight: 10,
   },
   progress: {
     color: '#0f766e',
     fontSize: 14,
     fontWeight: '700',
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#dbeafe',
-    borderRadius: 12,
+  overviewCard: {
+    backgroundColor: '#ecfeff',
+    borderColor: '#a5f3fc',
+    borderRadius: 16,
     borderWidth: 1,
     gap: 8,
-    marginBottom: 16,
+    marginBottom: 14,
     padding: 14,
-    position: 'relative',
   },
-  taskType: {
+  overviewLabel: {
+    color: '#155e75',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  overviewValue: {
+    color: '#0f172a',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  progressTrack: {
+    backgroundColor: '#cffafe',
+    borderRadius: 999,
+    height: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    backgroundColor: '#0891b2',
+    height: '100%',
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 12,
+    marginBottom: 14,
+    padding: 16,
+  },
+  itemLabel: {
     color: '#64748b',
     fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
-  promptInput: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    borderWidth: 1,
+  itemText: {
     color: '#0f172a',
     fontSize: 18,
+    lineHeight: 28,
+  },
+  segmentInlineWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  segmentInlineChip: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  segmentInlineChipActive: {
+    backgroundColor: '#0f766e',
+  },
+  segmentInlineText: {
+    color: '#0f172a',
+    fontSize: 17,
     fontWeight: '600',
     lineHeight: 24,
-    minHeight: 96,
-    padding: 10,
-    paddingBottom: 46,
   },
-  promptHint: {
-    color: '#64748b',
-    fontSize: 12,
+  segmentInlineTextActive: {
+    color: '#ffffff',
   },
-  addVocabularyButton: {
+  audioMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  audioMeta: {
+    color: '#475569',
+    fontSize: 13,
+  },
+  audioActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  audioIconButton: {
     alignItems: 'center',
     backgroundColor: '#0f766e',
     borderRadius: 999,
-    bottom: 10,
+    height: 52,
     justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: 12,
-    position: 'absolute',
-    right: 10,
+    width: 52,
   },
-  addVocabularyButtonDisabled: {
-    backgroundColor: '#94a3b8',
+  audioIconButtonSecondary: {
+    alignItems: 'center',
+    backgroundColor: '#ecfeff',
+    borderColor: '#99f6e4',
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
   },
-  addVocabularyButtonPressed: {
-    opacity: 0.9,
+  audioIconButtonDisabled: {
+    opacity: 0.45,
   },
-  addVocabularyButtonText: {
-    color: '#ffffff',
-    fontSize: 12,
+  audioIconButtonPressed: {
+    opacity: 0.85,
+  },
+  sectionTitle: {
+    color: '#0f172a',
+    fontSize: 16,
     fontWeight: '700',
   },
-  options: {
-    gap: 10,
-    marginBottom: 16,
+  sectionMeta: {
+    color: '#64748b',
+    fontSize: 13,
+    lineHeight: 18,
   },
-  optionButton: {
+  selectionCard: {
     backgroundColor: '#ffffff',
     borderColor: '#cbd5e1',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    minHeight: 48,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  optionButtonSelected: {
-    backgroundColor: '#ccfbf1',
-    borderColor: '#0f766e',
-  },
-  optionText: {
-    color: '#0f172a',
-    fontSize: 15,
-  },
-  optionTextSelected: {
-    color: '#115e59',
-    fontWeight: '600',
-  },
-  input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    borderWidth: 1,
-    fontSize: 16,
-    marginBottom: 16,
-    minHeight: 48,
-    paddingHorizontal: 12,
-  },
-  feedback: {
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 12,
-  },
-  feedbackGood: {
-    backgroundColor: '#dcfce7',
-  },
-  feedbackBad: {
-    backgroundColor: '#fee2e2',
-  },
-  feedbackText: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  syncNotice: {
-    backgroundColor: '#ffedd5',
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 12,
-  },
-  syncNoticeText: {
-    color: '#9a3412',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  vocabularyNotice: {
-    backgroundColor: '#ecfeff',
-    borderRadius: 12,
-    marginBottom: 16,
-    padding: 12,
-  },
-  vocabularyNoticeText: {
-    color: '#155e75',
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  actions: {
     gap: 10,
+    marginBottom: 14,
+    padding: 16,
   },
-  skipButton: {
-    alignItems: 'center',
-    borderColor: '#94a3b8',
-    borderRadius: 12,
-    borderWidth: 1,
-    minHeight: 48,
-    justifyContent: 'center',
+  wordFlow: {
+    color: '#0f172a',
+    fontSize: 18,
+    flexWrap: 'wrap',
+    lineHeight: 34,
   },
-  skipText: {
-    color: '#334155',
-    fontSize: 15,
-    fontWeight: '600',
+  wordToken: {
+    borderRadius: 8,
+    color: '#0f172a',
+  },
+  wordTokenSelected: {
+    backgroundColor: '#99f6e4',
+    color: '#134e4a',
+  },
+  wordTokenPending: {
+    backgroundColor: '#fde68a',
+    color: '#78350f',
+  },
+  notice: {
+    color: '#0f766e',
+    fontSize: 13,
+  },
+  syncError: {
+    color: '#b45309',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  navigationRow: {
+    gap: 10,
+    marginBottom: 18,
   },
   meta: {
     color: '#475569',
-    fontSize: 14,
+    fontSize: 13,
   },
   error: {
     color: '#b91c1c',

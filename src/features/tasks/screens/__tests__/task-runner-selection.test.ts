@@ -1,7 +1,7 @@
 import {
   extractSelectionText,
   shouldShowAddToVocabularyButton,
-} from '@/src/features/tasks/screens/task-runner-screen';
+} from '@/src/features/tasks/screens/task-runner-selection';
 
 describe('task runner prompt selection helpers', () => {
   it('extracts selected text and normalizes whitespace', () => {

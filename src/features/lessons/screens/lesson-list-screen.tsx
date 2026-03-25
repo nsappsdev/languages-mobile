@@ -245,7 +245,7 @@ export function LessonListScreen() {
               </View>
 
               <Text style={styles.cardDescription}>{item.description || 'No description provided.'}</Text>
-              <Text style={styles.cardMeta}>{item.tasks?.length ?? 0} tasks</Text>
+              <Text style={styles.cardMeta}>{item.items?.length ?? 0} items</Text>
             </Pressable>
           );
         }}

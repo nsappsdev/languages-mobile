@@ -11,7 +11,7 @@ function createLesson(input: { id: string; title: string }): Lesson {
     status: 'PUBLISHED',
     createdAt: '2026-02-25T10:00:00.000Z',
     updatedAt: '2026-02-25T10:00:00.000Z',
-    tasks: [],
+    items: [],
   };
 }
 

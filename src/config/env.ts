@@ -50,3 +50,17 @@ function resolveApiBaseUrl() {
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
+
+export function resolveApiAssetUrl(pathOrUrl: string) {
+  const value = pathOrUrl.trim();
+  if (!value) {
+    return value;
+  }
+
+  if (/^https?:\/\//i.test(value)) {
+    return value;
+  }
+
+  const apiOrigin = API_BASE_URL.replace(/\/api$/, '');
+  return `${apiOrigin}${value.startsWith('/') ? value : `/${value}`}`;
+}

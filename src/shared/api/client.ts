@@ -224,6 +224,13 @@ export const apiClient = {
     });
   },
 
+  removeVocabularyFromLearner(token: string, entryId: string) {
+    return request<{ message?: string }>(`/me/vocabulary/${entryId}`, {
+      method: 'DELETE',
+      token,
+    });
+  },
+
   resolveVocabularyPack(token: string, items: string[]) {
     return request<{
       vocabulary: LearnerVocabularyItem[];

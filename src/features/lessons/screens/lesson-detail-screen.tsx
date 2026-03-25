@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getLessonAccess } from '@/src/features/lessons/lesson-locking';
@@ -21,6 +22,9 @@ export function LessonDetailScreen({ lessonId }: LessonDetailScreenProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLocked, setIsLocked] = useState(false);
   const [lockMessage, setLockMessage] = useState<string | null>(null);
+  const handleGoToDashboard = () => {
+    router.replace('/(tabs)/lessons');
+  };
 
   useEffect(() => {
     if (!token || !lessonId) {
@@ -64,6 +68,10 @@ export function LessonDetailScreen({ lessonId }: LessonDetailScreenProps) {
   if (!token) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
           <Text style={styles.meta}>Sign in to view this lesson.</Text>
         </View>
@@ -74,6 +82,10 @@ export function LessonDetailScreen({ lessonId }: LessonDetailScreenProps) {
   if (isLoading) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
           <ActivityIndicator size="large" />
           <Text style={styles.meta}>Loading lesson...</Text>
@@ -85,27 +97,34 @@ export function LessonDetailScreen({ lessonId }: LessonDetailScreenProps) {
   if (error || !lesson) {
     return (
       <ScreenContainer>
+        <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+        </Pressable>
         <View style={styles.center}>
           <Text style={styles.error}>{error ?? 'Lesson not found.'}</Text>
-          <Pressable onPress={() => router.back()} style={styles.backButton}>
-            <Text style={styles.backText}>Back</Text>
-          </Pressable>
         </View>
       </ScreenContainer>
     );
   }
 
-  const sortedTasks = [...lesson.tasks].sort((left, right) => left.order - right.order);
+  const sortedItems = [...lesson.items].sort((left, right) => left.order - right.order);
 
   return (
     <ScreenContainer scroll>
       <View style={styles.header}>
+        <View style={styles.headerTopRow}>
+          <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
+            <Ionicons name="chevron-back" size={18} color="#0f766e" />
+            <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
+          </Pressable>
+          <Text style={styles.status}>{lesson.status}</Text>
+        </View>
         <Text style={styles.title}>{lesson.title}</Text>
-        <Text style={styles.status}>{lesson.status}</Text>
       </View>
 
       <Text style={styles.description}>{lesson.description || 'No description provided.'}</Text>
-      <Text style={styles.meta}>{sortedTasks.length} tasks</Text>
+      <Text style={styles.meta}>{sortedItems.length} items</Text>
 
       {isLocked && lockMessage ? (
         <View style={styles.lockCard}>
@@ -114,11 +133,11 @@ export function LessonDetailScreen({ lessonId }: LessonDetailScreenProps) {
       ) : null}
 
       <View style={styles.taskList}>
-        {sortedTasks.map((task, index) => (
-          <View key={task.id} style={styles.taskCard}>
-            <Text style={styles.taskOrder}>Task {index + 1}</Text>
-            <Text style={styles.taskPrompt}>{task.prompt}</Text>
-            <Text style={styles.taskType}>{task.type}</Text>
+        {sortedItems.map((item, index) => (
+          <View key={item.id} style={styles.taskCard}>
+            <Text style={styles.taskOrder}>Item {index + 1}</Text>
+            <Text style={styles.taskPrompt}>{item.text}</Text>
+            <Text style={styles.taskType}>{item.segments.length} synced phrases</Text>
           </View>
         ))}
       </View>
@@ -193,21 +212,27 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     textAlign: 'center',
   },
-  backButton: {
-    backgroundColor: '#0f766e',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  backText: {
-    color: '#ffffff',
-    fontWeight: '600',
-  },
   header: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  headerTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 12,
+    justifyContent: 'space-between',
+  },
+  dashboardLink: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 4,
+    paddingVertical: 2,
+  },
+  dashboardLinkText: {
+    color: '#0f766e',
+    fontSize: 14,
+    fontWeight: '700',
   },
   taskList: {
     gap: 10,

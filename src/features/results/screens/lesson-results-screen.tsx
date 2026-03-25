@@ -5,24 +5,27 @@ import { ScreenContainer } from '@/src/shared/ui/screen-container';
 
 interface LessonResultsScreenProps {
   lessonId: string;
-  score: string;
-  total: string;
+  items: string;
   completion: string;
 }
 
-export function LessonResultsScreen({ lessonId, score, total, completion }: LessonResultsScreenProps) {
+export function LessonResultsScreen({
+  lessonId,
+  items,
+  completion,
+}: LessonResultsScreenProps) {
   const router = useRouter();
 
   return (
     <ScreenContainer>
       <View style={styles.container}>
         <Text style={styles.title}>Lesson Complete</Text>
-        <Text style={styles.subtitle}>Great work. Here is your summary for this run.</Text>
+        <Text style={styles.subtitle}>You finished the text-and-audio lesson run.</Text>
 
         <View style={styles.stats}>
-          <StatCard label="Score" value={`${score}%`} />
           <StatCard label="Completion" value={`${completion}%`} />
-          <StatCard label="Tasks" value={total} />
+          <StatCard label="Items" value={items} />
+          <StatCard label="Mode" value="Audio" />
         </View>
 
         <View style={styles.actions}>

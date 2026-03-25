@@ -1,28 +1,21 @@
 export type LessonStatus = 'DRAFT' | 'PUBLISHED';
-export type TaskType = 'PICK_ONE' | 'FILL_IN_BLANK' | 'MATCH' | 'LISTENING_TEXT';
 export type VocabularyKind = 'WORD' | 'PHRASE' | 'SENTENCE';
 export type LearnerVocabularyStatus = 'NEW' | 'REVIEWING' | 'MASTERED';
 
-export interface TaskOption {
+export interface LessonItemSegment {
   id: string;
-  label: string;
-  isCorrect: boolean;
+  text: string;
+  startMs: number;
+  endMs: number;
 }
 
-export interface TaskConfig {
-  correctAnswers?: string[];
-  audioUrl?: string;
-  [key: string]: unknown;
-}
-
-export interface Task {
+export interface LessonItem {
   id: string;
   lessonId: string;
-  prompt: string;
-  type: TaskType;
   order: number;
-  config: TaskConfig;
-  options: TaskOption[];
+  text: string;
+  audioUrl: string;
+  segments: LessonItemSegment[];
 }
 
 export interface Lesson {
@@ -32,7 +25,7 @@ export interface Lesson {
   status: LessonStatus;
   createdAt?: string;
   updatedAt?: string;
-  tasks: Task[];
+  items: LessonItem[];
 }
 
 export interface User {
@@ -78,16 +71,13 @@ export interface LearnerVocabularyItem {
   entry: VocabularyEntry;
 }
 
-export type ProgressEventType = 'TASK_ATTEMPT' | 'TASK_COMPLETED' | 'LESSON_COMPLETED';
+export type ProgressEventType = 'ITEM_STARTED' | 'ITEM_COMPLETED' | 'LESSON_COMPLETED';
 
 export interface ProgressEvent {
   idempotencyKey: string;
   lessonId: string;
-  taskId?: string;
+  lessonItemId?: string;
   eventType: ProgressEventType;
-  attemptNumber?: number;
-  isCorrect?: boolean;
-  score?: number;
   completion?: number;
   clientTimestamp?: string;
   payload?: Record<string, unknown>;

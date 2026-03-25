@@ -118,7 +118,7 @@ export async function addSelectionToVocabulary(
   }
 }
 
-function normalizeVocabularySelection(value: string): string | null {
+export function normalizeVocabularySelection(value: string): string | null {
   const cleaned = value
     .trim()
     .replace(/\s+/g, ' ')

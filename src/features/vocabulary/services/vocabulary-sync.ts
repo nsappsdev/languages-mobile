@@ -156,3 +156,12 @@ export async function mergeCachedVocabulary(
 
   return setCachedVocabulary(userId, Array.from(byId.values()));
 }
+
+export async function removeCachedVocabulary(
+  userId: string,
+  entryId: string,
+): Promise<LearnerVocabularyItem[]> {
+  const existing = await getCachedVocabulary(userId);
+  const filtered = existing.filter((item) => item.entryId !== entryId);
+  return setCachedVocabulary(userId, filtered);
+}
