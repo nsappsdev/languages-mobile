@@ -46,7 +46,12 @@
         }
       ],
       "expo-secure-store",
-      "expo-audio"
+      [
+        "expo-audio",
+        {
+          "recordAudioAndroid": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
