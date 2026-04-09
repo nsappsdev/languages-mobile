@@ -9,11 +9,7 @@ function normalizeBaseUrl(value: string) {
 }
 
 function extractExpoHost() {
-  const possibleHostUri =
-    Constants.expoConfig?.hostUri ??
-    ((Constants as unknown as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost ??
-      (Constants as unknown as { manifest2?: { extra?: { expoGo?: { debuggerHost?: string } } } })
-        .manifest2?.extra?.expoGo?.debuggerHost);
+  const possibleHostUri = Constants.expoConfig?.hostUri;
 
   if (!possibleHostUri) {
     return null;

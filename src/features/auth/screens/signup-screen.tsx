@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,6 +14,9 @@ import { ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
+import { border, neutral, surface, text } from '@/src/shared/theme';
+import { fontSize, fontWeight } from '@/src/shared/theme';
+import { radii } from '@/src/shared/theme';
 
 export function SignupScreen() {
   const router = useRouter();
@@ -23,6 +26,8 @@ export function SignupScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const emailRef = useRef<TextInput>(null);
+  const passwordRef = useRef<TextInput>(null);
 
   const handleSignup = async () => {
     const nameError = validateName(name);
@@ -65,7 +70,7 @@ export function SignupScreen() {
   return (
     <ScreenContainer>
       <KeyboardAvoidingView
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}>
         <View style={styles.header}>
           <Text style={styles.title}>Create account</Text>
@@ -79,7 +84,10 @@ export function SignupScreen() {
               autoCapitalize="words"
               autoComplete="name"
               onChangeText={setName}
+              onSubmitEditing={() => emailRef.current?.focus()}
               placeholder="Your full name"
+              placeholderTextColor={neutral[400]}
+              returnKeyType="next"
               style={styles.input}
               value={name}
             />
@@ -88,11 +96,15 @@ export function SignupScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Email</Text>
             <TextInput
+              ref={emailRef}
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
               onChangeText={setEmail}
+              onSubmitEditing={() => passwordRef.current?.focus()}
               placeholder="you@example.com"
+              placeholderTextColor={neutral[400]}
+              returnKeyType="next"
               style={styles.input}
               value={email}
             />
@@ -101,9 +113,13 @@ export function SignupScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Password</Text>
             <TextInput
+              ref={passwordRef}
               autoCapitalize="none"
               onChangeText={setPassword}
+              onSubmitEditing={handleSignup}
               placeholder="At least 6 chars, letters + numbers"
+              placeholderTextColor={neutral[400]}
+              returnKeyType="done"
               secureTextEntry
               style={styles.input}
               value={password}
@@ -137,14 +153,14 @@ const styles = StyleSheet.create({
     marginBottom: 28,
   },
   title: {
-    color: '#0f172a',
-    fontSize: 30,
-    fontWeight: '700',
+    color: text.primary,
+    fontSize: fontSize['4xl'],
+    fontWeight: fontWeight.bold,
     marginBottom: 8,
   },
   subtitle: {
-    color: '#475569',
-    fontSize: 16,
+    color: text.secondary,
+    fontSize: fontSize.lg,
     lineHeight: 22,
   },
   form: {
@@ -154,26 +170,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '600',
+    color: text.primary,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
+    backgroundColor: surface.input,
+    borderColor: border.default,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    fontSize: 16,
+    fontSize: fontSize.lg,
     minHeight: 48,
     paddingHorizontal: 12,
   },
   error: {
-    color: '#b91c1c',
-    fontSize: 14,
+    color: text.error,
+    fontSize: fontSize.md,
   },
   hint: {
-    color: '#475569',
-    fontSize: 12,
+    color: text.secondary,
+    fontSize: fontSize.sm,
     textAlign: 'center',
   },
 });

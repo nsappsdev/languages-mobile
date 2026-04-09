@@ -1,3 +1,5 @@
+import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { User } from '@/src/types/domain';
 
@@ -14,8 +16,6 @@ type SessionStore = {
   setItem: (key: string, value: string) => Promise<void>;
   removeItem: (key: string) => Promise<void>;
 };
-
-const memoryFallbackStore = new Map<string, string>();
 
 function resolveWebStore(): SessionStore | null {
   if (typeof window === 'undefined') {
@@ -44,91 +44,22 @@ function resolveWebStore(): SessionStore | null {
   }
 }
 
-function resolveNativeSecureStore(): SessionStore | null {
-  if (Platform.OS === 'web') {
-    return null;
-  }
-
-  try {
-    // Optional runtime dependency. If unavailable, fallback storage is used.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const secureStore = require('expo-secure-store') as {
-      getItemAsync?: (key: string) => Promise<string | null>;
-      setItemAsync?: (key: string, value: string) => Promise<void>;
-      deleteItemAsync?: (key: string) => Promise<void>;
-    };
-
-    if (
-      secureStore?.getItemAsync &&
-      secureStore?.setItemAsync &&
-      secureStore?.deleteItemAsync
-    ) {
-      return {
-        getItem(key: string) {
-          return secureStore.getItemAsync!(key);
-        },
-        setItem(key: string, value: string) {
-          return secureStore.setItemAsync!(key, value);
-        },
-        removeItem(key: string) {
-          return secureStore.deleteItemAsync!(key);
-        },
-      };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-function resolveAsyncStorageStore(): SessionStore | null {
-  try {
-    // Optional runtime dependency fallback when secure storage is unavailable.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asyncStorage = require('@react-native-async-storage/async-storage').default as {
-      getItem?: (key: string) => Promise<string | null>;
-      setItem?: (key: string, value: string) => Promise<void>;
-      removeItem?: (key: string) => Promise<void>;
-    };
-
-    if (asyncStorage?.getItem && asyncStorage?.setItem && asyncStorage?.removeItem) {
-      return {
-        getItem(key: string) {
-          return asyncStorage.getItem!(key);
-        },
-        setItem(key: string, value: string) {
-          return asyncStorage.setItem!(key, value);
-        },
-        removeItem(key: string) {
-          return asyncStorage.removeItem!(key);
-        },
-      };
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
-}
-
-const fallbackStore: SessionStore = {
-  async getItem(key: string) {
-    return memoryFallbackStore.get(key) ?? null;
-  },
-  async setItem(key: string, value: string) {
-    memoryFallbackStore.set(key, value);
-  },
-  async removeItem(key: string) {
-    memoryFallbackStore.delete(key);
-  },
+const nativeSecureStore: SessionStore = {
+  getItem: (key) => SecureStore.getItemAsync(key),
+  setItem: (key, value) => SecureStore.setItemAsync(key, value),
+  removeItem: (key) => SecureStore.deleteItemAsync(key),
 };
 
-const sessionStore =
-  resolveNativeSecureStore() ??
-  resolveWebStore() ??
-  resolveAsyncStorageStore() ??
-  fallbackStore;
+const asyncStorageStore: SessionStore = {
+  getItem: (key) => AsyncStorage.getItem(key),
+  setItem: (key, value) => AsyncStorage.setItem(key, value),
+  removeItem: (key) => AsyncStorage.removeItem(key),
+};
+
+const sessionStore: SessionStore =
+  Platform.OS !== 'web'
+    ? nativeSecureStore
+    : (resolveWebStore() ?? asyncStorageStore);
 
 function isPersistedSession(value: unknown): value is PersistedSession {
   if (!value || typeof value !== 'object') {
