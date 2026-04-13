@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "language",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nsappsdev.language",
@@ -17,7 +16,6 @@
     },
     "android": {
       "package": "com.nsappsdev.language",
-      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,7 +25,6 @@
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -55,7 +52,11 @@
           "microphonePermission": false,
           "recordAudioAndroid": false
         }
-      ]
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-web-browser",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true,
