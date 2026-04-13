@@ -28,7 +28,8 @@ interface SessionContextValue {
   token: string | null;
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string) => Promise<void>;
+  signup: (name: string, email: string, password: string) => Promise<{ message: string }>;
+  googleSignIn: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -82,6 +83,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const signup = useCallback(async (name: string, email: string, password: string) => {
     const response = await apiClient.signup(name, email, password);
+    return response;
+  }, []);
+
+  const googleSignIn = useCallback(async (idToken: string) => {
+    const response = await apiClient.googleSignIn(idToken);
     applySession({
       token: response.token,
       refreshToken: response.refreshToken,
@@ -248,10 +254,11 @@ export function SessionProvider({ children }: PropsWithChildren) {
       user,
       login,
       signup,
+      googleSignIn,
       logout,
       refreshProfile,
     }),
-    [isInitializing, login, logout, refreshProfile, signup, token, user],
+    [googleSignIn, isInitializing, login, logout, refreshProfile, signup, token, user],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
