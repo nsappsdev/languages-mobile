@@ -131,7 +131,7 @@ export function LessonListScreen() {
         await loadProgressState();
       }
 
-      router.push({ pathname: '/lesson/[lessonId]', params: { lessonId: item.id } });
+      router.push({ pathname: '/runner/[lessonId]', params: { lessonId: item.id } });
     },
     [firstIncompleteIndex, loadProgressState, router, user?.id],
   );

@@ -6,7 +6,7 @@
   "build": {
     "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://lezoo.app/api"
       },
       "android": {
         "buildType": "apk"
@@ -17,7 +17,7 @@
     },
     "production-store": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://lezoo.app/api"
       },
       "autoIncrement": true,
       "android": {

@@ -32,6 +32,9 @@ import {
 } from '@/src/features/vocabulary/services/vocabulary-sync';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
+import { border, brand, neutral, surface, text } from '@/src/shared/theme';
+import { fontSize, fontWeight } from '@/src/shared/theme';
+import { radii } from '@/src/shared/theme';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import type { LearnerVocabularyItem, Lesson, ProgressEvent } from '@/src/types/domain';
@@ -264,6 +267,43 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     [currentItem],
   );
 
+  /**
+   * Maps each word token index → the segment ID it belongs to (by character
+   * offset in the full item text), or null if the token is not in any segment.
+   */
+  const tokenSegmentIds = useMemo((): (string | null)[] => {
+    if (!currentItem || !currentItem.segments.length) {
+      return wordTokens.map(() => null);
+    }
+    const fullText = currentItem.text;
+    const segments = currentItem.segments;
+    const result: (string | null)[] = [];
+    let charPos = 0;
+
+    for (const tok of wordTokens) {
+      const start = charPos;
+      const end = start + tok.text.length;
+      charPos = end;
+
+      if (!tok.normalized) {
+        result.push(null);
+        continue;
+      }
+
+      let found: string | null = null;
+      for (const seg of segments) {
+        const segStart = fullText.indexOf(seg.text);
+        if (segStart !== -1 && start >= segStart && end <= segStart + seg.text.length) {
+          found = seg.id;
+          break;
+        }
+      }
+      result.push(found);
+    }
+
+    return result;
+  }, [currentItem, wordTokens]);
+
   const startPlayback = useCallback(async () => {
     const duration = playbackStatus.duration ?? 0;
     const currentTime = playbackStatus.currentTime ?? 0;
@@ -456,7 +496,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return (
       <ScreenContainer>
         <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
-          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Ionicons name="chevron-back" size={18} color={brand[700]} />
           <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
         </Pressable>
         <View style={styles.center}>
@@ -470,7 +510,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return (
       <ScreenContainer>
         <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
-          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Ionicons name="chevron-back" size={18} color={brand[700]} />
           <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
         </Pressable>
         <View style={styles.center}>
@@ -485,7 +525,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return (
       <ScreenContainer>
         <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
-          <Ionicons name="chevron-back" size={18} color="#0f766e" />
+          <Ionicons name="chevron-back" size={18} color={brand[700]} />
           <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
         </Pressable>
         <View style={styles.center}>
@@ -498,14 +538,15 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const completion = calculateCompletion(completedItemIds, items.length);
   const durationSeconds = playbackStatus.duration ?? 0;
   const currentSeconds = playbackStatus.currentTime ?? 0;
-  const audioSourceLabel = playableAudioUrl?.startsWith('file://') ? 'Cached on device' : 'Streaming';
+  const audioSourceLabel = playableAudioUrl?.startsWith('file://') ? 'Cached' : 'Streaming';
 
   return (
     <ScreenContainer scroll>
       <View>
+        {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
-            <Ionicons name="chevron-back" size={18} color="#0f766e" />
+            <Ionicons name="chevron-back" size={18} color={brand[700]} />
             <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
           </Pressable>
           <View style={styles.headerTitleRow}>
@@ -514,6 +555,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           </View>
         </View>
 
+        {/* Progress overview */}
         <View style={styles.overviewCard}>
           <Text style={styles.overviewLabel}>Lesson Progress</Text>
           <Text style={styles.overviewValue}>{completion}% complete</Text>
@@ -522,36 +564,77 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           </View>
         </View>
 
+        {/* Single unified content card */}
         <View style={styles.card}>
-          <Text style={styles.itemLabel}>Item {currentItemIndex + 1}</Text>
-          {currentItem.segments.length ? (
-            <View style={styles.segmentInlineWrap}>
-              {currentItem.segments.map((segment) => {
-                const isActive = segment.id === activeSegmentId;
-                return (
-                  <View
-                    key={segment.id}
-                    style={[styles.segmentInlineChip, isActive && styles.segmentInlineChipActive]}>
-                    <Text style={[styles.segmentInlineText, isActive && styles.segmentInlineTextActive]}>
-                      {segment.text}
-                    </Text>
-                  </View>
-                );
-              })}
+          {/* Card top row: item label + audio status + time */}
+          <View style={styles.cardTopRow}>
+            <Text style={styles.itemLabel}>Item {currentItemIndex + 1}</Text>
+            <View style={styles.audioMetaRow}>
+              <Text style={styles.audioMeta}>
+                {isAudioCaching ? 'Caching…' : playableAudioUrl ? audioSourceLabel : 'No audio'}
+              </Text>
+              <Text style={styles.audioMeta}>
+                {formatSeconds(currentSeconds)} / {formatSeconds(durationSeconds)}
+              </Text>
             </View>
-          ) : (
-            <Text style={styles.itemText}>{currentItem.text}</Text>
-          )}
-
-          <View style={styles.audioMetaRow}>
-            <Text style={styles.audioMeta}>
-              {isAudioCaching ? 'Caching audio…' : playableAudioUrl ? audioSourceLabel : 'No audio'}
-            </Text>
-            <Text style={styles.audioMeta}>
-              {formatSeconds(currentSeconds)} / {formatSeconds(durationSeconds)}
-            </Text>
           </View>
 
+          {/* Word flow — every word token reserves a fixed-height translation row
+              so showing/hiding translations never causes a layout shift */}
+          <View style={styles.wordFlow}>
+            {wordTokens.map((tok, idx) => {
+              if (!tok.normalized) {
+                // Whitespace — not tappable, no translation row needed
+                return (
+                  <Text key={tok.key} style={styles.wordWhitespace}>
+                    {tok.text}
+                  </Text>
+                );
+              }
+
+              const isInActiveSegment =
+                activeSegmentId !== null && tokenSegmentIds[idx] === activeSegmentId;
+              const isSelected = Boolean(vocabularyByText[tok.normalized]);
+              const isPending = Boolean(pendingWords[tok.normalized]);
+              const armenianTranslation =
+                vocabularyByText[tok.normalized]?.entry.translations.find(
+                  (t) => t.languageCode === 'am',
+                )?.translation ?? null;
+
+              return (
+                <Pressable
+                  key={tok.key}
+                  onPress={() => void handleToggleWordVocabulary(tok.text, tok.normalized)}
+                  style={styles.tokenWrapper}>
+                  {/* Translation row — always present at fixed height; invisible when empty */}
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.tokenTranslation,
+                      !armenianTranslation && styles.tokenTranslationHidden,
+                    ]}>
+                    {armenianTranslation ?? '\u00A0'}
+                  </Text>
+                  {/* Word — background changes on active segment; color changes on saved/pending */}
+                  <Text
+                    style={[
+                      styles.tokenWord,
+                      isInActiveSegment && styles.tokenWordActive,
+                      isSelected && styles.tokenWordSaved,
+                      isPending && styles.tokenWordPending,
+                    ]}>
+                    {tok.text}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {vocabularyNotice ? (
+            <Text style={styles.notice}>{vocabularyNotice}</Text>
+          ) : null}
+
+          {/* Audio controls */}
           <View style={styles.audioActions}>
             <Pressable
               onPress={handleTogglePlayback}
@@ -566,7 +649,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               <Ionicons
                 name={playbackStatus.playing ? 'pause' : 'play'}
                 size={24}
-                color="#ffffff"
+                color={neutral[0]}
               />
             </Pressable>
             <Pressable
@@ -579,74 +662,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                 !playableAudioUrl && styles.audioIconButtonDisabled,
                 pressed && playableAudioUrl && styles.audioIconButtonPressed,
               ]}>
-              <Ionicons name="refresh" size={22} color="#0f766e" />
+              <Ionicons name="refresh" size={22} color={brand[700]} />
             </Pressable>
           </View>
-        </View>
-
-        <View style={styles.selectionCard}>
-          <Text style={styles.sectionTitle}>Tap Words To Save Or Remove</Text>
-          <Text style={styles.sectionMeta}>
-            Tap a word once to add it to learner vocabulary. Tap it again to remove it.
-          </Text>
-
-          <View style={styles.wordFlow}>
-            {wordTokens.map((token) => {
-              if (!token.normalized) {
-                return (
-                  <Text key={token.key} style={styles.wordWhitespace}>
-                    {token.text}
-                  </Text>
-                );
-              }
-
-              const isSelected = Boolean(vocabularyByText[token.normalized]);
-              const isPending = Boolean(pendingWords[token.normalized]);
-              const selectedEntry = vocabularyByText[token.normalized];
-              const armenianTranslation =
-                selectedEntry?.entry.translations.find(
-                  (translation) => translation.languageCode === 'am',
-                )?.translation ?? null;
-              const showSelectedTranslation = Boolean(armenianTranslation);
-
-              return (
-                <Pressable
-                  key={token.key}
-                  onPress={() => {
-                    void handleToggleWordVocabulary(token.text, token.normalized);
-                  }}
-                  style={[
-                    styles.wordTokenPressable,
-                    showSelectedTranslation && styles.wordTokenStack,
-                    !showSelectedTranslation && isSelected && styles.wordTokenInlineSelected,
-                    !showSelectedTranslation && isPending && styles.wordTokenInlinePending,
-                  ]}>
-                  {showSelectedTranslation ? (
-                    <Text
-                      adjustsFontSizeToFit
-                      ellipsizeMode="tail"
-                      minimumFontScale={0.8}
-                      numberOfLines={1}
-                      style={styles.wordTokenTranslation}>
-                      {armenianTranslation}
-                    </Text>
-                  ) : null}
-                  <Text
-                    style={[
-                      styles.wordTokenText,
-                      !showSelectedTranslation && styles.wordTokenPlainText,
-                      showSelectedTranslation && styles.wordTokenTextSelected,
-                      isSelected && !showSelectedTranslation && styles.wordTokenTextSelected,
-                      isPending && styles.wordTokenTextPending,
-                    ]}>
-                    {token.text}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          {vocabularyNotice ? <Text style={styles.notice}>{vocabularyNotice}</Text> : null}
         </View>
 
         {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
@@ -722,9 +740,9 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   dashboardLinkText: {
-    color: '#0f766e',
-    fontSize: 14,
-    fontWeight: '700',
+    color: brand[700],
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
   },
   headerTitleRow: {
     alignItems: 'center',
@@ -732,20 +750,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   title: {
-    color: '#0f172a',
+    color: text.primary,
     flex: 1,
     fontSize: 26,
-    fontWeight: '700',
+    fontWeight: fontWeight.bold,
   },
   progress: {
-    color: '#0f766e',
-    fontSize: 14,
-    fontWeight: '700',
+    color: text.brand,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
   },
   overviewCard: {
-    backgroundColor: '#ecfeff',
+    backgroundColor: brand[50],
     borderColor: '#a5f3fc',
-    borderRadius: 16,
+    borderRadius: radii['2xl'],
     borderWidth: 1,
     gap: 8,
     marginBottom: 14,
@@ -753,18 +771,18 @@ const styles = StyleSheet.create({
   },
   overviewLabel: {
     color: '#155e75',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
     textTransform: 'uppercase',
   },
   overviewValue: {
-    color: '#0f172a',
-    fontSize: 20,
-    fontWeight: '700',
+    color: text.primary,
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
   },
   progressTrack: {
     backgroundColor: '#cffafe',
-    borderRadius: 999,
+    borderRadius: radii.full,
     height: 8,
     overflow: 'hidden',
   },
@@ -772,74 +790,112 @@ const styles = StyleSheet.create({
     backgroundColor: '#0891b2',
     height: '100%',
   },
+  // ── Unified content card ────────────────────────────────────────────────────
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderRadius: 16,
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['2xl'],
     borderWidth: 1,
-    gap: 12,
+    gap: 14,
     marginBottom: 14,
     padding: 16,
   },
-  itemLabel: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  itemText: {
-    color: '#0f172a',
-    fontSize: 18,
-    lineHeight: 28,
-  },
-  segmentInlineWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  segmentInlineChip: {
-    backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  segmentInlineChipActive: {
-    backgroundColor: '#0f766e',
-  },
-  segmentInlineText: {
-    color: '#0f172a',
-    fontSize: 17,
-    fontWeight: '600',
-    lineHeight: 24,
-  },
-  segmentInlineTextActive: {
-    color: '#ffffff',
-  },
-  audioMetaRow: {
+  cardTopRow: {
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  audioMeta: {
-    color: '#475569',
-    fontSize: 13,
+  itemLabel: {
+    color: text.muted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
   },
+  audioMetaRow: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  audioMeta: {
+    color: text.secondary,
+    fontSize: fontSize.sm,
+    textAlign: 'right',
+  },
+  // ── Word flow ───────────────────────────────────────────────────────────────
+  wordFlow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  /**
+   * Whitespace tokens: align at the bottom edge so they sit flush with
+   * the word text row inside tokenWrapper.
+   */
+  wordWhitespace: {
+    color: text.primary,
+    fontSize: 18,
+    lineHeight: 24,
+    marginBottom: 4,
+  },
+  /**
+   * Word token container: always has a fixed-height translation row on top
+   * so adding/removing a translation never causes a layout shift.
+   */
+  tokenWrapper: {
+    alignItems: 'center',
+    marginBottom: 4,
+    marginHorizontal: 1,
+  },
+  /** Fixed height = always reserves space; opacity 0 hides it when empty. */
+  tokenTranslation: {
+    color: brand[700],
+    fontSize: 10,
+    fontWeight: fontWeight.bold,
+    height: 13,
+    lineHeight: 13,
+    textAlign: 'center',
+  },
+  tokenTranslationHidden: {
+    opacity: 0,
+  },
+  tokenWord: {
+    borderRadius: radii.sm,
+    color: text.primary,
+    fontSize: 18,
+    lineHeight: 24,
+    overflow: 'hidden',
+    paddingHorizontal: 3,
+  },
+  /** Active segment: teal background tint — no size change. */
+  tokenWordActive: {
+    backgroundColor: brand[50],
+    color: brand[800],
+  },
+  /** Word saved to vocabulary. */
+  tokenWordSaved: {
+    color: text.brand,
+  },
+  /** Vocabulary toggle in-flight. */
+  tokenWordPending: {
+    color: text.warning,
+  },
+  // ── Audio controls ──────────────────────────────────────────────────────────
   audioActions: {
     flexDirection: 'row',
     gap: 12,
   },
   audioIconButton: {
     alignItems: 'center',
-    backgroundColor: '#0f766e',
-    borderRadius: 999,
+    backgroundColor: brand[700],
+    borderRadius: radii.full,
     height: 52,
     justifyContent: 'center',
     width: 52,
   },
   audioIconButtonSecondary: {
     alignItems: 'center',
-    backgroundColor: '#ecfeff',
-    borderColor: '#99f6e4',
-    borderRadius: 999,
+    backgroundColor: brand[50],
+    borderColor: border.active,
+    borderRadius: radii.full,
     borderWidth: 1,
     height: 52,
     justifyContent: 'center',
@@ -851,83 +907,13 @@ const styles = StyleSheet.create({
   audioIconButtonPressed: {
     opacity: 0.85,
   },
-  sectionTitle: {
-    color: '#0f172a',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  sectionMeta: {
-    color: '#64748b',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  selectionCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 10,
-    marginBottom: 14,
-    padding: 16,
-  },
-  wordFlow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  wordWhitespace: {
-    color: '#0f172a',
-    fontSize: 18,
-    lineHeight: 28,
-  },
-  wordTokenPressable: {
-    marginBottom: 4,
-  },
-  wordTokenStack: {
-    alignItems: 'center',
-    gap: 1,
-    marginHorizontal: 1,
-    maxWidth: 132,
-  },
-  wordTokenInlineSelected: {
-    borderRadius: 6,
-    color: '#0f766e',
-    paddingHorizontal: 2,
-  },
-  wordTokenInlinePending: {
-    borderRadius: 6,
-    color: '#b45309',
-    paddingHorizontal: 2,
-  },
-  wordTokenTranslation: {
-    color: '#0f766e',
-    fontSize: 10,
-    fontWeight: '700',
-    lineHeight: 12,
-    maxWidth: '100%',
-    textAlign: 'center',
-  },
-  wordTokenText: {
-    color: '#0f172a',
-    fontSize: 18,
-    lineHeight: 24,
-  },
-  wordTokenPlainText: {
-    lineHeight: 28,
-  },
-  wordTokenTextSelected: {
-    color: '#0f766e',
-  },
-  wordTokenTextPending: {
-    color: '#b45309',
-  },
   notice: {
-    color: '#0f766e',
-    fontSize: 13,
+    color: text.brand,
+    fontSize: fontSize.base,
   },
   syncError: {
-    color: '#b45309',
-    fontSize: 13,
+    color: text.warning,
+    fontSize: fontSize.base,
     marginBottom: 12,
   },
   navigationRow: {
@@ -935,11 +921,11 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   meta: {
-    color: '#475569',
-    fontSize: 13,
+    color: text.secondary,
+    fontSize: fontSize.base,
   },
   error: {
-    color: '#b91c1c',
+    color: text.error,
     textAlign: 'center',
   },
 });

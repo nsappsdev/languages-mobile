@@ -11,7 +11,7 @@ const FOOTER_ITEMS = [
     icon: 'home-outline' as const,
     activeIcon: 'home' as const,
     href: '/(tabs)/lessons',
-    matches: ['/lesson/', '/runner/', '/results/'],
+    matches: ['/runner/', '/results/'],
   },
   {
     key: 'vocabulary',
