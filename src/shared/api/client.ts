@@ -1,5 +1,6 @@
 import { API_BASE_URL } from '@/src/config/env';
 import type {
+  GoogleSignInResponse,
   LearnerVocabularyItem,
   LearnerVocabularyStatus,
   Lesson,
@@ -13,12 +14,14 @@ import type {
 
 export class ApiError extends Error {
   status: number;
+  code?: string;
   issues?: unknown;
 
-  constructor(message: string, status: number, issues?: unknown) {
+  constructor(message: string, status: number, code?: string, issues?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
     this.issues = issues;
   }
 }
@@ -77,8 +80,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     if (!response.ok) {
       const message = extractErrorMessage(payload, response.status);
+      const code = isRecord(payload) && typeof payload.code === 'string' ? payload.code : undefined;
       const issues = isRecord(payload) ? payload.issues : undefined;
-      const error = new ApiError(message, response.status, issues);
+      const error = new ApiError(message, response.status, code, issues);
 
       if (response.status === 401 && currentToken && allowRefresh && authRefreshHandler) {
         const refreshedToken = await authRefreshHandler(currentToken, error);
@@ -135,6 +139,20 @@ export const apiClient = {
     return request<SignupResponse>('/auth/signup', {
       method: 'POST',
       body: JSON.stringify({ name, email, password }),
+    });
+  },
+
+  resendVerification(email: string) {
+    return request<{ message: string }>('/auth/resend-verification', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  googleSignIn(idToken: string) {
+    return request<GoogleSignInResponse>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ idToken }),
     });
   },
 

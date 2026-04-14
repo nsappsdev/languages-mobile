@@ -26,29 +26,20 @@ export function SignupScreen() {
 
   const handleSignup = async () => {
     const nameError = validateName(name);
-    if (nameError) {
-      setError(nameError);
-      return;
-    }
+    if (nameError) { setError(nameError); return; }
 
     const emailError = validateEmail(email);
-    if (emailError) {
-      setError(emailError);
-      return;
-    }
+    if (emailError) { setError(emailError); return; }
 
     const passwordError = validatePassword(password);
-    if (passwordError) {
-      setError(passwordError);
-      return;
-    }
+    if (passwordError) { setError(passwordError); return; }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
       await signup(name.trim(), email.trim(), password);
-      router.replace('/(tabs)/lessons');
+      router.replace({ pathname: '/(auth)/verify-email-sent', params: { email: email.trim() } });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -69,7 +60,7 @@ export function SignupScreen() {
         style={styles.keyboardView}>
         <View style={styles.header}>
           <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Sign up and go straight to your dashboard.</Text>
+          <Text style={styles.subtitle}>Sign up to start learning.</Text>
         </View>
 
         <View style={styles.form}>
@@ -129,35 +120,13 @@ export function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    marginBottom: 28,
-  },
-  title: {
-    color: '#0f172a',
-    fontSize: 30,
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: '#475569',
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  form: {
-    gap: 16,
-  },
-  field: {
-    gap: 8,
-  },
-  label: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+  keyboardView: { flex: 1, justifyContent: 'center' },
+  header: { marginBottom: 28 },
+  title: { color: '#0f172a', fontSize: 30, fontWeight: '700', marginBottom: 8 },
+  subtitle: { color: '#475569', fontSize: 16, lineHeight: 22 },
+  form: { gap: 16 },
+  field: { gap: 8 },
+  label: { color: '#0f172a', fontSize: 14, fontWeight: '600' },
   input: {
     backgroundColor: '#ffffff',
     borderColor: '#cbd5e1',
@@ -167,13 +136,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 12,
   },
-  error: {
-    color: '#b91c1c',
-    fontSize: 14,
-  },
-  hint: {
-    color: '#475569',
-    fontSize: 12,
-    textAlign: 'center',
-  },
+  error: { color: '#b91c1c', fontSize: 14 },
+  hint: { color: '#475569', fontSize: 12, textAlign: 'center' },
 });

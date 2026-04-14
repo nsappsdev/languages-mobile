@@ -379,12 +379,9 @@ export function VocabularyScreen() {
                 ],
               },
             ]}>
-            <Text style={styles.reviewArmenian}>{armenianTranslation}</Text>
             <Text style={styles.reviewEnglish}>{activeReviewItem.entry.englishText}</Text>
-            <Text style={styles.reviewStatus}>{activeReviewItem.status}</Text>
             <Text style={styles.reviewMetaText}>
-              Armenian is highlighted first. Swipe right if this word feels learned, or left if
-              you need to review it again.
+              Do you remember the translation? Swipe right if yes, left if no.
             </Text>
             {isSubmittingReview ? <ActivityIndicator size="small" color="#0f766e" /> : null}
           </Animated.View>
@@ -477,11 +474,15 @@ export function VocabularyScreen() {
 
                 return (
                   <View key={entry.id} style={styles.card}>
-                    <View style={styles.cardHeader}>
-                      <Text style={styles.status}>{entry.status}</Text>
+                    <View style={styles.cardRow}>
+                      <View style={styles.cardLeft}>
+                        <Text style={styles.word}>{entry.entry.englishText}</Text>
+                      </View>
+                      <View style={styles.cardDivider} />
+                      <View style={styles.cardRight}>
+                        <Text style={styles.translationPrimary}>{translation}</Text>
+                      </View>
                     </View>
-                    <Text style={styles.translationPrimary}>{translation}</Text>
-                    <Text style={styles.word}>{entry.entry.englishText}</Text>
                   </View>
                 );
               })}
@@ -665,6 +666,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     padding: 12,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  cardLeft: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  cardDivider: {
+    backgroundColor: '#dbeafe',
+    width: 1,
+    alignSelf: 'stretch',
+    marginHorizontal: 4,
+  },
+  cardRight: {
+    flex: 1,
+    paddingLeft: 10,
   },
   cardHeader: {
     alignItems: 'center',
