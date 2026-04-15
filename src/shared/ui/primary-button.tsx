@@ -1,4 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
+import { border, brand, neutral, surface, text } from '@/src/shared/theme';
+import { fontSize, fontWeight } from '@/src/shared/theme';
+import { radii } from '@/src/shared/theme';
 
 interface PrimaryButtonProps {
   title: string;
@@ -26,7 +29,7 @@ export function PrimaryButton({
         pressed && !disabled && !loading && styles.buttonPressed,
       ]}>
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? '#0f766e' : '#ffffff'} />
+        <ActivityIndicator color={variant === 'secondary' ? brand[700] : neutral[0]} />
       ) : (
         <Text style={[styles.text, variant === 'secondary' && styles.textSecondary]}>{title}</Text>
       )}
@@ -37,29 +40,29 @@ export function PrimaryButton({
 const styles = StyleSheet.create({
   button: {
     alignItems: 'center',
-    backgroundColor: '#0f766e',
-    borderRadius: 12,
+    backgroundColor: brand[700],
+    borderRadius: radii.lg,
     justifyContent: 'center',
     minHeight: 48,
     paddingHorizontal: 16,
   },
   buttonSecondary: {
-    backgroundColor: '#ecfeff',
-    borderColor: '#99f6e4',
+    backgroundColor: surface.active,
+    borderColor: border.active,
     borderWidth: 1,
   },
   buttonDisabled: {
-    backgroundColor: '#94a3b8',
+    backgroundColor: neutral[400],
   },
   buttonPressed: {
     opacity: 0.9,
   },
   text: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: text.inverse,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
   },
   textSecondary: {
-    color: '#0f766e',
+    color: text.brand,
   },
 });

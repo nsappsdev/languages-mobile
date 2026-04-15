@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -14,14 +14,18 @@ import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import { validateEmail, validatePassword } from '@/src/features/auth/utils/validators';
+import { border, neutral, surface, text } from '@/src/shared/theme';
+import { fontSize, fontWeight } from '@/src/shared/theme';
+import { radii } from '@/src/shared/theme';
 
 export function LoginScreen() {
   const router = useRouter();
   const { login } = useSession();
-  const [email, setEmail] = useState('user@email.com');
-  const [password, setPassword] = useState('user#666');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const passwordRef = useRef<TextInput>(null);
 
   const handleLogin = async () => {
     const emailError = validateEmail(email);
@@ -62,7 +66,7 @@ export function LoginScreen() {
   return (
     <ScreenContainer>
       <KeyboardAvoidingView
-        behavior={Platform.select({ ios: 'padding', android: undefined })}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}>
         <View style={styles.header}>
           <Text style={styles.title}>Language App</Text>
@@ -77,7 +81,10 @@ export function LoginScreen() {
               autoComplete="email"
               keyboardType="email-address"
               onChangeText={setEmail}
+              onSubmitEditing={() => passwordRef.current?.focus()}
               placeholder="you@example.com"
+              placeholderTextColor={neutral[400]}
+              returnKeyType="next"
               style={styles.input}
               value={email}
             />
@@ -86,9 +93,13 @@ export function LoginScreen() {
           <View style={styles.field}>
             <Text style={styles.label}>Password</Text>
             <TextInput
+              ref={passwordRef}
               autoCapitalize="none"
               onChangeText={setPassword}
+              onSubmitEditing={handleLogin}
               placeholder="••••••••"
+              placeholderTextColor={neutral[400]}
+              returnKeyType="done"
               secureTextEntry
               style={styles.input}
               value={password}
@@ -107,13 +118,6 @@ export function LoginScreen() {
           <Pressable onPress={() => router.push('/(auth)/signup')}>
             <Text style={styles.hint}>No account yet? Create one.</Text>
           </Pressable>
-
-          <Pressable onPress={() => {
-            setEmail('user@email.com');
-            setPassword('user#666');
-          }}>
-            <Text style={styles.hint}>Use seeded mobile user credentials.</Text>
-          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </ScreenContainer>
@@ -129,14 +133,14 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   title: {
-    color: '#0f172a',
-    fontSize: 32,
-    fontWeight: '700',
+    color: text.primary,
+    fontSize: fontSize['5xl'],
+    fontWeight: fontWeight.bold,
     marginBottom: 8,
   },
   subtitle: {
-    color: '#475569',
-    fontSize: 16,
+    color: text.secondary,
+    fontSize: fontSize.lg,
     lineHeight: 22,
   },
   form: {
@@ -146,26 +150,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   label: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '600',
+    color: text.primary,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
+    backgroundColor: surface.input,
+    borderColor: border.default,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    fontSize: 16,
+    fontSize: fontSize.lg,
     minHeight: 48,
     paddingHorizontal: 12,
   },
   error: {
-    color: '#b91c1c',
-    fontSize: 14,
+    color: text.error,
+    fontSize: fontSize.md,
   },
   hint: {
-    color: '#475569',
-    fontSize: 12,
+    color: text.secondary,
+    fontSize: fontSize.sm,
     textAlign: 'center',
   },
 });

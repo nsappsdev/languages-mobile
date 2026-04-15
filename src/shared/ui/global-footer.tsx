@@ -1,31 +1,42 @@
 import { Ionicons } from '@expo/vector-icons';
-import { usePathname, useRouter } from 'expo-router';
+import { type Href, usePathname, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/shared/auth/session-context';
+import { useFooterLayout } from '@/src/shared/ui/footer-inset-context';
+import { border, brand, neutral, surface, text } from '@/src/shared/theme';
+import { fontSize, fontWeight } from '@/src/shared/theme';
+import { radii } from '@/src/shared/theme';
 
-const FOOTER_ITEMS = [
+const FOOTER_ITEMS: Array<{
+  key: string;
+  label: string;
+  icon: 'home-outline' | 'book-outline' | 'person-outline';
+  activeIcon: 'home' | 'book' | 'person';
+  href: Href;
+  matches: string[];
+}> = [
   {
     key: 'lessons',
     label: 'Dashboard',
-    icon: 'home-outline' as const,
-    activeIcon: 'home' as const,
+    icon: 'home-outline',
+    activeIcon: 'home',
     href: '/(tabs)/lessons',
     matches: ['/runner/', '/results/'],
   },
   {
     key: 'vocabulary',
     label: 'Vocabulary',
-    icon: 'book-outline' as const,
-    activeIcon: 'book' as const,
+    icon: 'book-outline',
+    activeIcon: 'book',
     href: '/(tabs)/vocabulary',
     matches: [],
   },
   {
     key: 'profile',
     label: 'Profile',
-    icon: 'person-outline' as const,
-    activeIcon: 'person' as const,
+    icon: 'person-outline',
+    activeIcon: 'person',
     href: '/(tabs)/profile',
     matches: [],
   },
@@ -36,13 +47,16 @@ export function GlobalFooter() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { isAuthenticated, isInitializing } = useSession();
+  const onFooterLayout = useFooterLayout();
 
   if (isInitializing || !isAuthenticated) {
     return null;
   }
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View
+      onLayout={onFooterLayout}
+      style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={styles.footer}>
         {FOOTER_ITEMS.map((item) => {
           const isActive =
@@ -52,7 +66,7 @@ export function GlobalFooter() {
           return (
             <Pressable
               key={item.key}
-              onPress={() => router.replace(item.href as never)}
+              onPress={() => router.replace(item.href)}
               style={({ pressed }) => [
                 styles.item,
                 isActive && styles.itemActive,
@@ -61,7 +75,7 @@ export function GlobalFooter() {
               <Ionicons
                 name={isActive ? item.activeIcon : item.icon}
                 size={20}
-                color={isActive ? '#0f766e' : '#64748b'}
+                color={isActive ? brand[700] : neutral[500]}
               />
               <Text style={[styles.label, isActive && styles.labelActive]}>{item.label}</Text>
             </Pressable>
@@ -82,38 +96,38 @@ const styles = StyleSheet.create({
     right: 0,
   },
   footer: {
-    backgroundColor: '#ffffff',
-    borderColor: '#dbeafe',
-    borderRadius: 18,
+    backgroundColor: surface.overlay,
+    borderColor: border.subtle,
+    borderRadius: radii['3xl'],
     borderWidth: 1,
     flexDirection: 'row',
     paddingHorizontal: 8,
     paddingTop: 8,
-    shadowColor: '#0f172a',
+    shadowColor: neutral[900],
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
   },
   item: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: radii.xl,
     flex: 1,
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 10,
   },
   itemActive: {
-    backgroundColor: '#ecfeff',
+    backgroundColor: surface.active,
   },
   itemPressed: {
     opacity: 0.85,
   },
   label: {
-    color: '#64748b',
-    fontSize: 11,
-    fontWeight: '700',
+    color: text.muted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
   },
   labelActive: {
-    color: '#0f766e',
+    color: text.brand,
   },
 });
