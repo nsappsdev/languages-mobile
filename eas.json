@@ -4,29 +4,28 @@
     "appVersionSource": "remote"
   },
   "build": {
-    "production": {
-      "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
-      },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "ios": {
-        "distribution": "store"
       }
     },
-    "production-store": {
+    "production": {
       "env": {
-        "EXPO_PUBLIC_API_BASE_URL": "http://138.68.76.47/api"
+        "EXPO_PUBLIC_API_BASE_URL": "https://lezoo.app/api"
       },
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "distribution": "store"
       }
     }
   },
   "submit": {
-    "production-store": {
+    "production": {
       "android": {
         "track": "internal"
       }

@@ -22,7 +22,7 @@ const FOOTER_ITEMS: Array<{
     icon: 'home-outline',
     activeIcon: 'home',
     href: '/(tabs)/lessons',
-    matches: ['/lesson/', '/runner/', '/results/'],
+    matches: ['/runner/', '/results/'],
   },
   {
     key: 'vocabulary',

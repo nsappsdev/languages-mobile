@@ -42,7 +42,8 @@ export interface AuthResponse {
 }
 
 export type LoginResponse = AuthResponse;
-export type SignupResponse = AuthResponse;
+export type SignupResponse = { message: string };
+export type GoogleSignInResponse = AuthResponse;
 
 export interface VocabularyTranslation {
   id: string;
