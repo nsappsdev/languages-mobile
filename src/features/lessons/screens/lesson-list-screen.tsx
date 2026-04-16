@@ -20,9 +20,7 @@ import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import type { Lesson } from '@/src/types/domain';
-import { border, brand, neutral, surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
-import { radii } from '@/src/shared/theme';
+import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
 const EMPTY_PROGRESS_STATE: LessonProgressState = {
   completedLessonIds: [],

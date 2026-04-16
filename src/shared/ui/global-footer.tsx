@@ -4,18 +4,16 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/shared/auth/session-context';
 import { useFooterLayout } from '@/src/shared/ui/footer-inset-context';
-import { border, brand, neutral, surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
-import { radii } from '@/src/shared/theme';
+import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
-const FOOTER_ITEMS: Array<{
+const FOOTER_ITEMS: {
   key: string;
   label: string;
   icon: 'home-outline' | 'book-outline' | 'person-outline';
   activeIcon: 'home' | 'book' | 'person';
   href: Href;
   matches: string[];
-}> = [
+}[] = [
   {
     key: 'lessons',
     label: 'Dashboard',

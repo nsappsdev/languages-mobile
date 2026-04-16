@@ -14,9 +14,7 @@ import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import { validateEmail, validatePassword } from '@/src/features/auth/utils/validators';
-import { border, neutral, surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
-import { radii } from '@/src/shared/theme';
+import { border, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
 export function LoginScreen() {
   const router = useRouter();

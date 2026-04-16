@@ -1,7 +1,6 @@
 import { Component, ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
+import { fontSize, fontWeight, surface, text } from '@/src/shared/theme';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -20,7 +19,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error) {
     // Surfaces the error in Metro/device logs so it is not silently swallowed.
-    // eslint-disable-next-line no-console
     console.error('[ErrorBoundary] uncaught render error:', error);
   }
 

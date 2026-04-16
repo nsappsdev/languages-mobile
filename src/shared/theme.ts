@@ -39,18 +39,24 @@ export const text = {
   brand: '#0e7490',
   warning: '#b45309',
   error: '#dc2626',
+  inverse: '#ffffff',
 };
 
 export const surface = {
   background: '#ffffff',
   card: '#ffffff',
   subtle: '#f9fafb',
+  page: '#f8fafc',
+  input: '#ffffff',
+  active: '#ecfeff',
+  overlay: 'rgba(255, 255, 255, 0.92)',
 };
 
 export const border = {
   default: '#e5e7eb',
   subtle: '#f3f4f6',
   active: '#0e7490',
+  warning: '#fdba74',
 };
 
 export const fontSize = {
@@ -62,6 +68,8 @@ export const fontSize = {
   xl: 18,
   '2xl': 22,
   '3xl': 28,
+  '4xl': 30,
+  '5xl': 32,
 };
 
 export const fontWeight = {
