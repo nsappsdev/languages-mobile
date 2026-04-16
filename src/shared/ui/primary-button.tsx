@@ -1,7 +1,5 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { border, brand, neutral, surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
-import { radii } from '@/src/shared/theme';
+import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
 interface PrimaryButtonProps {
   title: string;

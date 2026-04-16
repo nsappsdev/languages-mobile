@@ -24,9 +24,7 @@ import {
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { border, brand, neutral, surface, text } from '@/src/shared/theme';
-import { fontSize, fontWeight } from '@/src/shared/theme';
-import { radii } from '@/src/shared/theme';
+import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 import type {
   LearnerVocabularyItem,
   LearnerVocabularyStatus,
@@ -337,9 +335,6 @@ export function VocabularyScreen() {
   }
 
   if (activeReviewSection && activeReviewItem) {
-    const armenianTranslation =
-      activeReviewItem.entry.translations.find((translation) => translation.languageCode === 'am')
-        ?.translation ?? 'No Armenian translation yet.';
     const progressText = `${reviewIndex + 1} / ${activeReviewSection.items.length}`;
     const rotate = reviewCardPosition.x.interpolate({
       inputRange: [-180, 0, 180],
@@ -788,7 +783,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: surface.card,
     borderColor: border.default,
-    borderRadius: radii['4xl'],
+    borderRadius: radii['3xl'],
     borderWidth: 1,
     gap: 12,
     maxWidth: 420,
