@@ -5,6 +5,7 @@ import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
+import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -72,14 +73,15 @@ export function ProfileScreen() {
           <Row label="Name" value={user?.name ?? 'Unknown'} />
           <Row label="Email" value={user?.email ?? 'Unknown'} />
           <Row label="Role" value={user?.role ?? 'Unknown'} />
+          <Row
+            label="Email verified"
+            value={user?.emailVerified ? 'Yes' : 'No'}
+          />
         </View>
+
+        {user && user.emailVerified === false ? <VerificationBanner variant="block" /> : null}
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <View style={styles.noteCard}>
-          <Text style={styles.noteTitle}>Phase 1 Scope</Text>
-          <Text style={styles.noteText}>Progress and detailed learner stats will appear here after progress endpoints are implemented.</Text>
-        </View>
 
         <PrimaryButton
           title={isLoggingOut ? 'Signing Out...' : 'Sign Out'}
@@ -146,23 +148,5 @@ const styles = StyleSheet.create({
   error: {
     color: '#b91c1c',
     fontSize: 13,
-  },
-  noteCard: {
-    backgroundColor: '#ecfeff',
-    borderColor: '#99f6e4',
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12,
-  },
-  noteTitle: {
-    color: '#115e59',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  noteText: {
-    color: '#134e4a',
-    fontSize: 13,
-    lineHeight: 18,
   },
 });

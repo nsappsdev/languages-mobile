@@ -19,6 +19,7 @@ import { sortLessonsByLevelOrder } from '@/src/features/lessons/lesson-locking';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
+import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
 import type { Lesson } from '@/src/types/domain';
 import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
@@ -143,6 +144,21 @@ export function LessonListScreen() {
         <View style={styles.center}>
           <Text style={styles.meta}>Please sign in first.</Text>
         </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (user && user.emailVerified === false) {
+    return (
+      <ScreenContainer>
+        <View style={styles.header}>
+          <Text style={styles.title}>Dashboard</Text>
+          <Text style={styles.meta}>Verify your email to unlock lessons.</Text>
+        </View>
+        <VerificationBanner
+          title="Lessons are locked"
+          body={`We sent a verification link to ${user.email}. Open it to start learning.`}
+        />
       </ScreenContainer>
     );
   }
