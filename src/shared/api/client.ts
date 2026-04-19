@@ -6,8 +6,10 @@ import type {
   Lesson,
   LoginResponse,
   ProgressEvent,
+  ResendVerificationResponse,
   SignupResponse,
   User,
+  VerificationStatusResponse,
   VocabularyEntry,
   VocabularyKind,
 } from '@/src/types/domain';
@@ -142,10 +144,17 @@ export const apiClient = {
     });
   },
 
-  resendVerification(email: string) {
-    return request<{ message: string }>('/auth/resend-verification', {
+  resendVerification(token: string) {
+    return request<ResendVerificationResponse>('/auth/resend-verification', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      token,
+    });
+  },
+
+  verificationStatus(token: string) {
+    return request<VerificationStatusResponse>('/auth/verification-status', {
+      method: 'GET',
+      token,
     });
   },
 

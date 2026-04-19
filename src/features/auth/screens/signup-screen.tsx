@@ -42,7 +42,7 @@ export function SignupScreen() {
 
     try {
       await signup(name.trim(), email.trim(), password);
-      router.replace({ pathname: '/(auth)/verify-email-sent', params: { email: email.trim() } });
+      router.replace('/(tabs)/lessons');
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
@@ -168,6 +168,7 @@ const styles = StyleSheet.create({
     borderColor: border.default,
     borderRadius: radii.lg,
     borderWidth: 1,
+    color: text.primary,
     fontSize: fontSize.lg,
     minHeight: 48,
     paddingHorizontal: 12,

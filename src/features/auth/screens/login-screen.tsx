@@ -46,10 +46,6 @@ export function LoginScreen() {
       router.replace('/(tabs)/lessons');
     } catch (err) {
       if (err instanceof ApiError) {
-        if (err.status === 403 && err.code === 'EMAIL_NOT_VERIFIED') {
-          router.push({ pathname: '/(auth)/verify-email-sent', params: { email: email.trim() } });
-          return;
-        }
         setError(err.message);
       } else if (err instanceof Error) {
         setError(err.message);
@@ -157,6 +153,7 @@ const styles = StyleSheet.create({
     borderColor: border.default,
     borderRadius: radii.lg,
     borderWidth: 1,
+    color: text.primary,
     fontSize: fontSize.lg,
     minHeight: 48,
     paddingHorizontal: 12,

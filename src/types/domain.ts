@@ -33,6 +33,7 @@ export interface User {
   email: string;
   name: string;
   role: string;
+  emailVerified: boolean;
 }
 
 export interface AuthResponse {
@@ -42,8 +43,22 @@ export interface AuthResponse {
 }
 
 export type LoginResponse = AuthResponse;
-export type SignupResponse = { message: string };
+export type SignupResponse = AuthResponse;
 export type GoogleSignInResponse = AuthResponse;
+
+export interface VerificationStatusResponse {
+  emailVerified: boolean;
+  canResendAt: string;
+  remainingAttempts: number;
+  windowMaxAttempts: number;
+}
+
+export interface ResendVerificationResponse {
+  message: string;
+  canResendAt: string;
+  remainingAttempts: number;
+  windowMaxAttempts: number;
+}
 
 export interface VocabularyTranslation {
   id: string;
