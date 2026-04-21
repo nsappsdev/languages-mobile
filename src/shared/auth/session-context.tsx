@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { setProgressSyncSession } from '@/src/features/progress/progress-sync';
+import { setVocabularyStatusSyncSession } from '@/src/features/vocabulary/services/vocabulary-status-sync';
 import {
   apiClient,
   ApiError,
@@ -251,6 +252,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     void setProgressSyncSession({
+      token,
+      userId: user?.id ?? null,
+    });
+    void setVocabularyStatusSyncSession({
       token,
       userId: user?.id ?? null,
     });

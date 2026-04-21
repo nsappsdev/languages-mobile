@@ -36,7 +36,6 @@ export function LessonListScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [progressState, setProgressState] = useState<LessonProgressState>(EMPTY_PROGRESS_STATE);
 
   const loadProgressState = useCallback(async () => {
@@ -61,7 +60,6 @@ export function LessonListScreen() {
       }
 
       setError(null);
-      setNotice(null);
       try {
         const response = await apiClient.getLessons(token);
         const sortedLessons = [...response.lessons].sort(sortLessonsByLevelOrder);
@@ -101,11 +99,6 @@ export function LessonListScreen() {
     return new Set(validCompleted);
   }, [lessons, progressState.completedLessonIds]);
 
-  const firstIncompleteIndex = useMemo(
-    () => lessons.findIndex((lesson) => !completedSet.has(lesson.id)),
-    [completedSet, lessons],
-  );
-
   const currentLessonId = useMemo(
     () => resolveCurrentLessonId(lessons, progressState.activeLessonId, completedSet),
     [completedSet, lessons, progressState.activeLessonId],
@@ -121,13 +114,7 @@ export function LessonListScreen() {
     : null;
 
   const handleOpenLesson = useCallback(
-    async (item: Lesson, index: number) => {
-      const isLocked = firstIncompleteIndex !== -1 && index > firstIncompleteIndex;
-      if (isLocked) {
-        setNotice('Finish your current lesson first to unlock the next level.');
-        return;
-      }
-
+    async (item: Lesson) => {
       if (user?.id) {
         await setActiveLesson(user.id, item.id);
         await loadProgressState();
@@ -135,7 +122,7 @@ export function LessonListScreen() {
 
       router.push({ pathname: '/runner/[lessonId]', params: { lessonId: item.id } });
     },
-    [firstIncompleteIndex, loadProgressState, router, user?.id],
+    [loadProgressState, router, user?.id],
   );
 
   if (!token) {
@@ -191,7 +178,7 @@ export function LessonListScreen() {
     <ScreenContainer>
       <View style={styles.header}>
         <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.meta}>Follow levels in order. Finish current level to unlock the next.</Text>
+        <Text style={styles.meta}>Pick any level. Badges show your progress.</Text>
       </View>
 
       <View style={styles.summaryRow}>
@@ -216,33 +203,27 @@ export function LessonListScreen() {
         </Text>
       </View>
 
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-
       <FlatList
         data={lessons}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => {
           const status = getLessonCardStatus({
             lessonId: item.id,
-            index,
-            firstIncompleteIndex,
             completedSet,
             currentLessonId,
           });
           const isCompleted = status === 'COMPLETED';
-          const isLocked = status === 'LOCKED';
           const isCurrent = status === 'CURRENT';
 
           return (
             <Pressable
               onPress={() => {
-                void handleOpenLesson(item, index);
+                void handleOpenLesson(item);
               }}
               style={({ pressed }) => [
                 styles.card,
-                isLocked && styles.cardLocked,
                 isCurrent && styles.cardCurrent,
-                pressed && !isLocked && styles.cardPressed,
+                pressed && styles.cardPressed,
               ]}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{`Level ${index + 1}: ${item.title}`}</Text>
@@ -253,9 +234,7 @@ export function LessonListScreen() {
                       ? styles.statusCompleted
                       : isCurrent
                         ? styles.statusCurrent
-                        : isLocked
-                          ? styles.statusLocked
-                          : styles.statusOpen,
+                        : styles.statusOpen,
                   ]}>
                   {status}
                 </Text>
@@ -321,16 +300,14 @@ export function resolveCurrentLessonId(
   return lessons[lessons.length - 1]?.id ?? null;
 }
 
-type LessonCardStatus = 'COMPLETED' | 'CURRENT' | 'LOCKED' | 'OPEN';
+type LessonCardStatus = 'COMPLETED' | 'CURRENT' | 'OPEN';
 
 export function getLessonCardStatus(input: {
   lessonId: string;
-  index: number;
-  firstIncompleteIndex: number;
   completedSet: Set<string>;
   currentLessonId: string | null;
 }): LessonCardStatus {
-  const { lessonId, index, firstIncompleteIndex, completedSet, currentLessonId } = input;
+  const { lessonId, completedSet, currentLessonId } = input;
 
   if (completedSet.has(lessonId)) {
     return 'COMPLETED';
@@ -338,10 +315,6 @@ export function getLessonCardStatus(input: {
 
   if (currentLessonId === lessonId) {
     return 'CURRENT';
-  }
-
-  if (firstIncompleteIndex !== -1 && index > firstIncompleteIndex) {
-    return 'LOCKED';
   }
 
   return 'OPEN';
@@ -368,11 +341,6 @@ const styles = StyleSheet.create({
     color: text.error,
     fontSize: fontSize.md,
     textAlign: 'center',
-  },
-  notice: {
-    color: '#9a3412',
-    fontSize: fontSize.base,
-    marginBottom: 10,
   },
   retryButton: {
     backgroundColor: brand[700],
@@ -470,10 +438,6 @@ const styles = StyleSheet.create({
     borderColor: brand[700],
     borderWidth: 2,
   },
-  cardLocked: {
-    backgroundColor: neutral[100],
-    borderColor: border.default,
-  },
   cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -501,10 +465,6 @@ const styles = StyleSheet.create({
   statusCurrent: {
     backgroundColor: '#ccfbf1',
     color: brand[800],
-  },
-  statusLocked: {
-    backgroundColor: neutral[200],
-    color: neutral[700],
   },
   statusOpen: {
     backgroundColor: '#fef3c7',

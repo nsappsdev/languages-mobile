@@ -285,6 +285,21 @@ export const apiClient = {
     });
   },
 
+  updateVocabularyStatusBulk(
+    token: string,
+    items: { entryId: string; status: LearnerVocabularyStatus }[],
+  ) {
+    return request<{
+      vocabulary: LearnerVocabularyItem[];
+      received: number;
+      applied: number;
+    }>('/me/vocabulary/bulk-status', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ items }),
+    });
+  },
+
   resolveVocabularyPack(token: string, items: string[]) {
     return request<{
       vocabulary: LearnerVocabularyItem[];
