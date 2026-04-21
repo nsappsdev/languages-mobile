@@ -179,6 +179,14 @@ export const apiClient = {
     });
   },
 
+  updateProfile(token: string, input: { name: string }) {
+    return request<{ user: User }>('/auth/profile', {
+      method: 'PATCH',
+      token,
+      body: JSON.stringify(input),
+    });
+  },
+
   logout(token: string, refreshToken?: string | null) {
     return request<{ message: string }>('/auth/logout', {
       method: 'POST',

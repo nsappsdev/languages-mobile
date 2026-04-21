@@ -18,10 +18,15 @@ import {
   type LessonVocabularySection,
 } from '@/src/features/vocabulary/services/lesson-vocabulary';
 import {
+  applyVocabularyStatusOverrides,
   getCachedVocabulary,
   setCachedVocabulary,
 } from '@/src/features/vocabulary/services/vocabulary-sync';
-import { queueVocabularyStatusUpdate } from '@/src/features/vocabulary/services/vocabulary-status-sync';
+import {
+  flushVocabularyStatusQueue,
+  getQueuedVocabularyStatusUpdates,
+  queueVocabularyStatusUpdate,
+} from '@/src/features/vocabulary/services/vocabulary-status-sync';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
@@ -43,7 +48,9 @@ export function VocabularyScreen() {
   const [error, setError] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeReviewSectionId, setActiveReviewSectionId] = useState<string | null>(null);
+  const [activeReviewSection, setActiveReviewSection] = useState<LessonVocabularySection | null>(
+    null,
+  );
   const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
   const [reviewIndex, setReviewIndex] = useState(0);
   const [reviewMeta, setReviewMeta] = useState<string | null>(null);
@@ -68,9 +75,17 @@ export function VocabularyScreen() {
           apiClient.getLessons(token),
         ]);
         const sortedLessons = [...lessonsResponse.lessons].sort(sortLessonsByLevelOrder);
-        setItems(vocabularyResponse.vocabulary);
+        const pendingStatusUpdates = await getQueuedVocabularyStatusUpdates(user.id);
+        const vocabulary = applyVocabularyStatusOverrides(
+          vocabularyResponse.vocabulary,
+          pendingStatusUpdates,
+        );
+        setItems(vocabulary);
         setLessons(sortedLessons);
-        await setCachedVocabulary(user.id, vocabularyResponse.vocabulary);
+        await setCachedVocabulary(user.id, vocabulary);
+        if (pendingStatusUpdates.length > 0) {
+          setSyncMeta('Some vocabulary changes are saved locally and still syncing.');
+        }
       } catch (err) {
         if (err instanceof ApiError && err.status === 401) {
           return;
@@ -155,19 +170,11 @@ export function VocabularyScreen() {
     [items],
   );
 
-  const allSections = useMemo(
-    () => buildLessonVocabularySections(lessons, activeItems),
-    [activeItems, lessons],
-  );
   const filteredSections = useMemo(
     () => buildLessonVocabularySections(lessons, activeItems, searchQuery),
     [activeItems, lessons, searchQuery],
   );
 
-  const activeReviewSection = useMemo(
-    () => allSections.find((section) => section.id === activeReviewSectionId) ?? null,
-    [activeReviewSectionId, allSections],
-  );
   const activeReviewItem = activeReviewSection?.items[reviewIndex] ?? null;
 
   useEffect(() => {
@@ -176,14 +183,16 @@ export function VocabularyScreen() {
     }
 
     if (activeReviewSection.items.length === 0) {
-      setActiveReviewSectionId(null);
+      setActiveReviewSection(null);
       setReviewIndex(0);
       setReviewMeta(null);
       return;
     }
 
     if (reviewIndex > activeReviewSection.items.length - 1) {
-      setReviewIndex(Math.max(activeReviewSection.items.length - 1, 0));
+      setActiveReviewSection(null);
+      setReviewIndex(0);
+      setReviewMeta(null);
     }
   }, [activeReviewSection, reviewIndex]);
 
@@ -216,7 +225,23 @@ export function VocabularyScreen() {
       setItems(nextItems);
       void setCachedVocabulary(user.id, nextItems).catch(() => null);
 
-      void queueVocabularyStatusUpdate({ entryId: targetEntryId, status }).catch(() => null);
+      void (async () => {
+        const queueResult = await queueVocabularyStatusUpdate({ entryId: targetEntryId, status });
+        if (!queueResult.ok) {
+          setSyncMeta('Vocabulary change is saved locally but could not be queued for sync.');
+          return;
+        }
+
+        const flushResult = await flushVocabularyStatusQueue({ force: true });
+        if (!flushResult.ok) {
+          setSyncMeta('Vocabulary change is saved locally and will sync when the API is reachable.');
+          return;
+        }
+
+        setSyncMeta(null);
+      })().catch(() => {
+        setSyncMeta('Vocabulary change is saved locally and will sync when the API is reachable.');
+      });
 
       const isLastCard = reviewIndex >= activeReviewSection.items.length - 1;
       Animated.timing(reviewCardPosition, {
@@ -233,7 +258,7 @@ export function VocabularyScreen() {
         );
 
         if (isLastCard) {
-          setActiveReviewSectionId(null);
+          setActiveReviewSection(null);
           setReviewIndex(0);
           return;
         }
@@ -296,7 +321,10 @@ export function VocabularyScreen() {
   }, []);
 
   const handleStartReview = useCallback((section: LessonVocabularySection) => {
-    setActiveReviewSectionId(section.id);
+    setActiveReviewSection({
+      ...section,
+      items: [...section.items],
+    });
     setReviewIndex(0);
     setReviewMeta(null);
     setSearchQuery('');
@@ -351,7 +379,7 @@ export function VocabularyScreen() {
         <View style={styles.reviewHeader}>
           <Pressable
             onPress={() => {
-              setActiveReviewSectionId(null);
+              setActiveReviewSection(null);
               setReviewIndex(0);
               setReviewMeta(null);
               reviewCardPosition.setValue({ x: 0, y: 0 });

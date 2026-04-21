@@ -33,6 +33,7 @@ interface SessionContextValue {
   googleSignIn: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateProfile: (input: { name: string }) => Promise<void>;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -174,6 +175,21 @@ export function SessionProvider({ children }: PropsWithChildren) {
     }
   }, [clearSession]);
 
+  const updateProfile = useCallback(async (input: { name: string }) => {
+    const currentToken = tokenRef.current;
+    if (!currentToken) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await apiClient.updateProfile(currentToken, input);
+    setUser(response.user);
+    await savePersistedSession({
+      token: tokenRef.current ?? currentToken,
+      refreshToken: refreshTokenRef.current,
+      user: response.user,
+    });
+  }, []);
+
   useEffect(() => {
     setApiAuthRefreshHandler(async (_staleToken, error) => {
       if (error.status !== 401) {
@@ -272,8 +288,9 @@ export function SessionProvider({ children }: PropsWithChildren) {
       googleSignIn,
       logout,
       refreshProfile,
+      updateProfile,
     }),
-    [googleSignIn, isInitializing, login, logout, refreshProfile, signup, token, user],
+    [googleSignIn, isInitializing, login, logout, refreshProfile, signup, token, updateProfile, user],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

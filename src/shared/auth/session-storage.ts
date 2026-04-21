@@ -106,6 +106,11 @@ export async function loadPersistedSession(): Promise<PersistedSession | null> {
           typeof parsed.refreshToken === 'string' && parsed.refreshToken.length > 0
             ? parsed.refreshToken
             : null,
+        user: {
+          ...parsed.user,
+          emailVerified:
+            typeof parsed.user.emailVerified === 'boolean' ? parsed.user.emailVerified : false,
+        },
       };
     }
 

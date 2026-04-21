@@ -1,4 +1,5 @@
 import {
+  applyVocabularyStatusOverrides,
   getCachedVocabulary,
   mergeCachedVocabulary,
   setCachedVocabulary,
@@ -109,5 +110,23 @@ describe('vocabulary-sync service', () => {
     expect(userOneCached[0].entry.englishText).toBe('apple');
     expect(userTwoCached).toHaveLength(1);
     expect(userTwoCached[0].entry.englishText).toBe('banana');
+  });
+
+  it('applies pending status overrides over stale vocabulary payloads', () => {
+    const userId = 'sync-status-user';
+    const item = createVocabularyItem({
+      id: 'status-item',
+      userId,
+      word: 'years',
+      updatedAt: '2026-04-21T10:00:00.000Z',
+    });
+
+    const [updated] = applyVocabularyStatusOverrides(
+      [item],
+      [{ entryId: item.entryId, status: 'MASTERED', updatedAt: 1776772800000 }],
+    );
+
+    expect(updated.status).toBe('MASTERED');
+    expect(updated.updatedAt).toBe('2026-04-21T12:00:00.000Z');
   });
 });

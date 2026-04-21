@@ -31,7 +31,7 @@ const EMPTY_PROGRESS_STATE: LessonProgressState = {
 
 export function LessonListScreen() {
   const router = useRouter();
-  const { token, user } = useSession();
+  const { token, user, refreshProfile } = useSession();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -80,6 +80,11 @@ export function LessonListScreen() {
     },
     [loadProgressState, token],
   );
+
+  useEffect(() => {
+    if (!token) return;
+    refreshProfile().catch(() => null);
+  }, [refreshProfile, token]);
 
   useEffect(() => {
     fetchLessons().catch(() => null);
@@ -135,7 +140,7 @@ export function LessonListScreen() {
     );
   }
 
-  if (user && user.emailVerified === false) {
+  if (user && user.emailVerified !== true) {
     return (
       <ScreenContainer>
         <View style={styles.header}>

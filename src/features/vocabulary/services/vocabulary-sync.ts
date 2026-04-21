@@ -1,10 +1,16 @@
-import type { LearnerVocabularyItem } from '@/src/types/domain';
+import type { LearnerVocabularyItem, LearnerVocabularyStatus } from '@/src/types/domain';
 
 const STORAGE_KEY_PREFIX = 'language-vocabulary-sync-v1';
 
 type StorageLike = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
+};
+
+export type VocabularyStatusOverride = {
+  entryId: string;
+  status: LearnerVocabularyStatus;
+  updatedAt?: number | string;
 };
 
 const memoryFallbackStore = new Map<string, string>();
@@ -141,6 +147,38 @@ export async function setCachedVocabulary(
   runtimeCacheByUser.set(userId, normalized);
   await persist(userId, normalized);
   return normalized;
+}
+
+export function applyVocabularyStatusOverrides(
+  items: LearnerVocabularyItem[],
+  overrides: VocabularyStatusOverride[],
+): LearnerVocabularyItem[] {
+  if (overrides.length === 0) {
+    return items;
+  }
+
+  const latestByEntryId = new Map<string, VocabularyStatusOverride>();
+  for (const override of overrides) {
+    latestByEntryId.set(override.entryId, override);
+  }
+
+  return items.map((item) => {
+    const override = latestByEntryId.get(item.entryId);
+    if (!override) {
+      return item;
+    }
+
+    const updatedAt =
+      typeof override.updatedAt === 'number'
+        ? new Date(override.updatedAt).toISOString()
+        : override.updatedAt ?? item.updatedAt;
+
+    return {
+      ...item,
+      status: override.status,
+      updatedAt,
+    };
+  });
 }
 
 export async function mergeCachedVocabulary(

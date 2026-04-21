@@ -244,6 +244,19 @@ export async function queueVocabularyStatusUpdate(
   }
 }
 
+export async function getQueuedVocabularyStatusUpdates(
+  userId?: string,
+): Promise<QueuedStatusUpdate[]> {
+  const targetStorageKey = getStorageKeyForUser(userId ?? activeUserId);
+  await ensureStorageLoaded();
+
+  if (loadedStorageKey !== targetStorageKey) {
+    return dedupeLatestPerEntry(await readQueue(targetStorageKey));
+  }
+
+  return dedupeLatestPerEntry(queue);
+}
+
 export async function flushVocabularyStatusQueue(options: {
   force: boolean;
 }): Promise<FlushResult> {
