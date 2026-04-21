@@ -21,6 +21,7 @@ import {
   getCachedVocabulary,
   setCachedVocabulary,
 } from '@/src/features/vocabulary/services/vocabulary-sync';
+import { queueVocabularyStatusUpdate } from '@/src/features/vocabulary/services/vocabulary-status-sync';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
@@ -43,6 +44,7 @@ export function VocabularyScreen() {
   const [syncMeta, setSyncMeta] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeReviewSectionId, setActiveReviewSectionId] = useState<string | null>(null);
+  const [expandedSectionIds, setExpandedSectionIds] = useState<Set<string>>(new Set());
   const [reviewIndex, setReviewIndex] = useState(0);
   const [reviewMeta, setReviewMeta] = useState<string | null>(null);
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
@@ -193,61 +195,51 @@ export function VocabularyScreen() {
   }, [reviewCardPosition]);
 
   const handleReviewDecision = useCallback(
-    async (status: LearnerVocabularyStatus, direction: -1 | 1) => {
+    (status: LearnerVocabularyStatus, direction: -1 | 1) => {
       if (!token || !user?.id || !activeReviewItem || !activeReviewSection || isSubmittingReview) {
         animateCardBack();
         return;
       }
 
+      const targetEntryId = activeReviewItem.entryId;
+      const targetEnglishText = activeReviewItem.entry.englishText;
+
       setIsSubmittingReview(true);
       setReviewMeta(null);
 
-      try {
-        const response = await apiClient.updateVocabularyStatus(
-          token,
-          activeReviewItem.entryId,
-          status,
-        );
+      const nowIso = new Date().toISOString();
+      const nextItems = items.map((item) =>
+        item.entryId === targetEntryId
+          ? { ...item, status, updatedAt: nowIso }
+          : item,
+      );
+      setItems(nextItems);
+      void setCachedVocabulary(user.id, nextItems).catch(() => null);
 
-        const nextItems = items.map((item) =>
-          item.id === response.vocabulary.id ? response.vocabulary : item,
-        );
-        setItems(nextItems);
-        await setCachedVocabulary(user.id, nextItems);
+      void queueVocabularyStatusUpdate({ entryId: targetEntryId, status }).catch(() => null);
 
-        const isLastCard = reviewIndex >= activeReviewSection.items.length - 1;
-        Animated.timing(reviewCardPosition, {
-          toValue: { x: direction * 420, y: 0 },
-          duration: 160,
-          useNativeDriver: true,
-        }).start(() => {
-          reviewCardPosition.setValue({ x: 0, y: 0 });
-          setIsSubmittingReview(false);
-          setReviewMeta(
-            status === 'MASTERED'
-              ? `"${response.vocabulary.entry.englishText}" marked as learned and removed from active vocabulary.`
-              : `"${response.vocabulary.entry.englishText}" marked for more review.`
-          );
-
-          if (isLastCard) {
-            setActiveReviewSectionId(null);
-            setReviewIndex(0);
-            return;
-          }
-
-          setReviewIndex((prev) => prev + 1);
-        });
-      } catch (err) {
+      const isLastCard = reviewIndex >= activeReviewSection.items.length - 1;
+      Animated.timing(reviewCardPosition, {
+        toValue: { x: direction * 420, y: 0 },
+        duration: 160,
+        useNativeDriver: true,
+      }).start(() => {
+        reviewCardPosition.setValue({ x: 0, y: 0 });
         setIsSubmittingReview(false);
-        animateCardBack();
-        if (err instanceof ApiError) {
-          setReviewMeta(err.message);
-        } else if (err instanceof Error) {
-          setReviewMeta(err.message);
-        } else {
-          setReviewMeta('Failed to update this vocabulary status.');
+        setReviewMeta(
+          status === 'MASTERED'
+            ? `"${targetEnglishText}" marked as learned and removed from active vocabulary.`
+            : `"${targetEnglishText}" marked for more review.`,
+        );
+
+        if (isLastCard) {
+          setActiveReviewSectionId(null);
+          setReviewIndex(0);
+          return;
         }
-      }
+
+        setReviewIndex((prev) => prev + 1);
+      });
     },
     [
       activeReviewItem,
@@ -290,6 +282,18 @@ export function VocabularyScreen() {
       }),
     [activeReviewItem, animateCardBack, handleReviewDecision, isSubmittingReview, reviewCardPosition.x],
   );
+
+  const toggleSectionExpanded = useCallback((sectionId: string) => {
+    setExpandedSectionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  }, []);
 
   const handleStartReview = useCallback((section: LessonVocabularySection) => {
     setActiveReviewSectionId(section.id);
@@ -442,55 +446,73 @@ export function VocabularyScreen() {
       <FlatList
         data={filteredSections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionHeadingCopy}>
-                <Text style={styles.sectionTitle}>{item.title}</Text>
-                <Text style={styles.sectionMeta}>
-                  {item.items.length} saved {item.items.length === 1 ? 'word' : 'words'}
-                </Text>
-              </View>
-              <Pressable
-                onPress={() => handleStartReview(item)}
-                disabled={item.items.length === 0}
-                style={({ pressed }) => [
-                  styles.checkButton,
-                  pressed && item.items.length > 0 && styles.checkButtonPressed,
-                ]}>
-                <Text style={styles.checkButtonText}>Check</Text>
-              </Pressable>
-            </View>
-
-            {item.description ? <Text style={styles.sectionDescription}>{item.description}</Text> : null}
-
-            <View style={styles.sectionEntries}>
-              {item.items.slice(0, 6).map((entry) => {
-                const translation =
-                  entry.entry.translations.find((itemTranslation) => itemTranslation.languageCode === 'am')
-                    ?.translation ?? 'No Armenian translation yet.';
-
-                return (
-                  <View key={entry.id} style={styles.card}>
-                    <View style={styles.cardRow}>
-                      <View style={styles.cardLeft}>
-                        <Text style={styles.word}>{entry.entry.englishText}</Text>
-                      </View>
-                      <View style={styles.cardDivider} />
-                      <View style={styles.cardRight}>
-                        <Text style={styles.translationPrimary}>{translation}</Text>
-                      </View>
-                    </View>
+        renderItem={({ item }) => {
+          const isExpanded = expandedSectionIds.has(item.id);
+          return (
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Pressable
+                  onPress={() => toggleSectionExpanded(item.id)}
+                  style={({ pressed }) => [
+                    styles.sectionHeadingCopy,
+                    pressed && styles.sectionHeadingCopyPressed,
+                  ]}>
+                  <View style={styles.sectionTitleRow}>
+                    <Text style={styles.sectionTitle}>{item.title}</Text>
+                    <Text style={styles.sectionChevron}>{isExpanded ? '▾' : '▸'}</Text>
                   </View>
-                );
-              })}
-            </View>
+                  <Text style={styles.sectionMeta}>
+                    {item.items.length} saved {item.items.length === 1 ? 'word' : 'words'}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleStartReview(item)}
+                  disabled={item.items.length === 0}
+                  style={({ pressed }) => [
+                    styles.checkButton,
+                    pressed && item.items.length > 0 && styles.checkButtonPressed,
+                  ]}>
+                  <Text style={styles.checkButtonText}>Check</Text>
+                </Pressable>
+              </View>
 
-            {item.items.length > 6 ? (
-              <Text style={styles.moreMeta}>+{item.items.length - 6} more in this lesson</Text>
-            ) : null}
-          </View>
-        )}
+              {isExpanded ? (
+                <>
+                  {item.description ? (
+                    <Text style={styles.sectionDescription}>{item.description}</Text>
+                  ) : null}
+
+                  <View style={styles.sectionEntries}>
+                    {item.items.slice(0, 6).map((entry) => {
+                      const translation =
+                        entry.entry.translations.find(
+                          (itemTranslation) => itemTranslation.languageCode === 'am',
+                        )?.translation ?? 'No Armenian translation yet.';
+
+                      return (
+                        <View key={entry.id} style={styles.card}>
+                          <View style={styles.cardRow}>
+                            <View style={styles.cardLeft}>
+                              <Text style={styles.word}>{entry.entry.englishText}</Text>
+                            </View>
+                            <View style={styles.cardDivider} />
+                            <View style={styles.cardRight}>
+                              <Text style={styles.translationPrimary}>{translation}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {item.items.length > 6 ? (
+                    <Text style={styles.moreMeta}>+{item.items.length - 6} more in this lesson</Text>
+                  ) : null}
+                </>
+              ) : null}
+            </View>
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>
@@ -623,6 +645,19 @@ const styles = StyleSheet.create({
   sectionHeadingCopy: {
     flex: 1,
     gap: 2,
+  },
+  sectionHeadingCopyPressed: {
+    opacity: 0.7,
+  },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sectionChevron: {
+    color: text.muted,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
   },
   sectionTitle: {
     color: text.primary,

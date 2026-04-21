@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { resolveApiAssetUrl } from '@/src/config/env';
-import { getLessonAccess } from '@/src/features/lessons/lesson-locking';
 import {
   markLessonCompleted,
   setActiveLesson,
@@ -35,7 +34,12 @@ import { useSession } from '@/src/shared/auth/session-context';
 import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import type { LearnerVocabularyItem, Lesson, ProgressEvent } from '@/src/types/domain';
+import type {
+  LearnerVocabularyItem,
+  Lesson,
+  ProgressEvent,
+  VocabularyEntry,
+} from '@/src/types/domain';
 
 interface TaskRunnerScreenProps {
   lessonId: string;
@@ -55,6 +59,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     {},
   );
   const [pendingWords, setPendingWords] = useState<Record<string, true>>({});
+  const [entryCacheByText, setEntryCacheByText] = useState<Record<string, VocabularyEntry>>({});
   const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
   const [isAudioCaching, setIsAudioCaching] = useState(false);
   const startedItemIdsRef = useRef<Set<string>>(new Set());
@@ -72,15 +77,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       setIsLoading(true);
       setError(null);
       try {
-        if (user?.id) {
-          const access = await getLessonAccess(token, user.id, lessonId);
-          if (!access.allowed) {
-            setError(access.message ?? 'Lesson is locked.');
-            setLesson(null);
-            return;
-          }
-        }
-
         const response = await apiClient.getLesson(token, lessonId);
         setLesson(response.lesson);
       } catch (err) {
@@ -135,6 +131,53 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     if (!user?.id || !lessonId) return;
     void setActiveLesson(user.id, lessonId);
   }, [lessonId, user?.id]);
+
+  useEffect(() => {
+    if (!token || !lesson) return;
+
+    const uniqueTokens = Array.from(
+      new Set(
+        lesson.items.flatMap((item) =>
+          tokenizeLessonText(item.text)
+            .map((t) => t.normalized)
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ),
+    );
+
+    if (uniqueTokens.length === 0) return;
+
+    let cancelled = false;
+
+    const prefetchTranslations = async () => {
+      const chunks: string[][] = [];
+      for (let i = 0; i < uniqueTokens.length; i += 100) {
+        chunks.push(uniqueTokens.slice(i, i + 100));
+      }
+
+      const accumulated: Record<string, VocabularyEntry> = {};
+      for (const chunk of chunks) {
+        try {
+          const response = await apiClient.lookupVocabularyEntries(token, chunk);
+          for (const entry of response.entries) {
+            accumulated[entry.englishText.trim().toLowerCase()] = entry;
+          }
+        } catch {
+          // Prefetch best-effort; skip failed chunks.
+        }
+      }
+
+      if (!cancelled && Object.keys(accumulated).length > 0) {
+        setEntryCacheByText((prev) => ({ ...prev, ...accumulated }));
+      }
+    };
+
+    prefetchTranslations().catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lesson, token]);
 
   const items = useMemo(
     () => (lesson ? [...lesson.items].sort((left, right) => left.order - right.order) : []),
@@ -431,7 +474,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   ]);
 
   const handleToggleWordVocabulary = useCallback(
-    async (rawWord: string, normalizedWord: string | null) => {
+    (rawWord: string, normalizedWord: string | null) => {
       if (!normalizedWord || !token || !user?.id) {
         return;
       }
@@ -440,54 +483,97 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         return;
       }
 
-      setPendingWords((prev) => ({ ...prev, [normalizedWord]: true }));
-      try {
-        const existingItem = vocabularyByText[normalizedWord];
+      const existingItem = vocabularyByText[normalizedWord];
 
-        if (existingItem) {
-          try {
-            await apiClient.removeVocabularyFromLearner(token, existingItem.entryId);
-          } catch (error) {
-            if (!(error instanceof ApiError) || error.status !== 404) {
-              throw error;
-            }
-          }
-
-          await removeCachedVocabulary(user.id, existingItem.entryId);
-          setVocabularyByText((prev) => {
-            const next = { ...prev };
-            delete next[normalizedWord];
-            return next;
-          });
-          setVocabularyNotice(`Removed "${existingItem.entry.englishText}" from vocabulary.`);
-          return;
-        }
-
-        const result = await addSelectionToVocabulary(token, user.id, rawWord);
-        if (result.ok && result.vocabulary) {
-          const addedVocabulary = result.vocabulary;
-          const normalizedEntryKey = normalizeVocabularySelection(addedVocabulary.entry.englishText);
-          setVocabularyByText((prev) => ({
-            ...prev,
-            ...(normalizedEntryKey ? { [normalizedEntryKey]: addedVocabulary } : {}),
-          }));
-        }
-        setVocabularyNotice(result.message);
-      } catch (error) {
-        setVocabularyNotice(
-          error instanceof Error
-            ? error.message
-            : 'Failed to update learner vocabulary for this word.',
-        );
-      } finally {
-        setPendingWords((prev) => {
+      if (existingItem) {
+        setVocabularyByText((prev) => {
           const next = { ...prev };
           delete next[normalizedWord];
           return next;
         });
+        setVocabularyNotice(`Removed "${existingItem.entry.englishText}" from vocabulary.`);
+
+        void removeCachedVocabulary(user.id, existingItem.entryId).catch(() => null);
+        void apiClient
+          .removeVocabularyFromLearner(token, existingItem.entryId)
+          .catch((error) => {
+            if (error instanceof ApiError && error.status === 404) return;
+            // Network failure leaves server out of sync; user can retap to retry.
+          });
+        return;
       }
+
+      const prefetched = entryCacheByText[normalizedWord];
+      if (prefetched) {
+        const nowIso = new Date().toISOString();
+        const optimisticItem: LearnerVocabularyItem = {
+          id: `optimistic:${prefetched.id}`,
+          userId: user.id,
+          entryId: prefetched.id,
+          status: 'NEW',
+          addedAt: nowIso,
+          updatedAt: nowIso,
+          entry: prefetched,
+        };
+        setVocabularyByText((prev) => ({ ...prev, [normalizedWord]: optimisticItem }));
+        const translation = prefetched.translations[0]?.translation;
+        setVocabularyNotice(
+          translation
+            ? `Added "${prefetched.englishText}" to vocabulary. Translation: ${translation}`
+            : `Added "${prefetched.englishText}" to vocabulary.`,
+        );
+      } else {
+        setVocabularyNotice(`Saving "${rawWord}"...`);
+      }
+
+      setPendingWords((prev) => ({ ...prev, [normalizedWord]: true }));
+
+      void (async () => {
+        try {
+          const result = await addSelectionToVocabulary(token, user.id, rawWord);
+          if (result.ok && result.vocabulary) {
+            const addedVocabulary = result.vocabulary;
+            const normalizedEntryKey = normalizeVocabularySelection(
+              addedVocabulary.entry.englishText,
+            );
+            setVocabularyByText((prev) => ({
+              ...prev,
+              ...(normalizedEntryKey ? { [normalizedEntryKey]: addedVocabulary } : {}),
+            }));
+            if (!prefetched) {
+              setVocabularyNotice(result.message);
+            }
+          } else if (!result.ok) {
+            setVocabularyByText((prev) => {
+              if (!prev[normalizedWord]?.id.startsWith('optimistic:')) return prev;
+              const next = { ...prev };
+              delete next[normalizedWord];
+              return next;
+            });
+            setVocabularyNotice(result.message);
+          }
+        } catch (error) {
+          setVocabularyByText((prev) => {
+            if (!prev[normalizedWord]?.id.startsWith('optimistic:')) return prev;
+            const next = { ...prev };
+            delete next[normalizedWord];
+            return next;
+          });
+          setVocabularyNotice(
+            error instanceof Error
+              ? error.message
+              : 'Failed to update learner vocabulary for this word.',
+          );
+        } finally {
+          setPendingWords((prev) => {
+            const next = { ...prev };
+            delete next[normalizedWord];
+            return next;
+          });
+        }
+      })();
     },
-    [pendingWords, token, user?.id, vocabularyByText],
+    [entryCacheByText, pendingWords, token, user?.id, vocabularyByText],
   );
 
   if (!token) {

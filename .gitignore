@@ -27,6 +27,8 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+*.tmp
 
 # macOS
 .DS_Store
@@ -52,3 +54,6 @@ docs/
 
 # IDE
 .idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

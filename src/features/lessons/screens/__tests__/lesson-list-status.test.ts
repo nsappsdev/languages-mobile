@@ -49,39 +49,31 @@ describe('lesson list status helpers', () => {
     expect(resolveCurrentLessonId([], null, new Set())).toBeNull();
   });
 
-  it('computes card statuses for completed/current/locked/open', () => {
+  it('computes card statuses for completed/current/open', () => {
     const completed = getLessonCardStatus({
       lessonId: 'lesson-1',
-      index: 0,
-      firstIncompleteIndex: 1,
       completedSet: new Set(['lesson-1']),
       currentLessonId: 'lesson-2',
     });
     const current = getLessonCardStatus({
       lessonId: 'lesson-2',
-      index: 1,
-      firstIncompleteIndex: 1,
       completedSet: new Set(['lesson-1']),
       currentLessonId: 'lesson-2',
     });
-    const locked = getLessonCardStatus({
+    const openAhead = getLessonCardStatus({
       lessonId: 'lesson-3',
-      index: 2,
-      firstIncompleteIndex: 1,
       completedSet: new Set(['lesson-1']),
       currentLessonId: 'lesson-2',
     });
     const open = getLessonCardStatus({
       lessonId: 'lesson-1',
-      index: 0,
-      firstIncompleteIndex: -1,
       completedSet: new Set<string>(),
       currentLessonId: null,
     });
 
     expect(completed).toBe('COMPLETED');
     expect(current).toBe('CURRENT');
-    expect(locked).toBe('LOCKED');
+    expect(openAhead).toBe('OPEN');
     expect(open).toBe('OPEN');
   });
 });
