@@ -101,10 +101,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 8,
     paddingTop: 8,
-    shadowColor: neutral[900],
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
+    boxShadow: '0px 10px 18px rgba(0, 0, 0, 0.08)',
   },
   item: {
     alignItems: 'center',
