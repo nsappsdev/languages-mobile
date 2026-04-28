@@ -11,6 +11,15 @@
         "buildType": "apk"
       }
     },
+    "preview-ios": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://lezoo.app/api"
+      },
+      "ios": {
+        "simulator": false
+      }
+    },
     "production": {
       "env": {
         "EXPO_PUBLIC_API_BASE_URL": "https://lezoo.app/api",
@@ -29,6 +38,11 @@
     "production": {
       "android": {
         "track": "internal"
+      },
+      "ios": {
+        "appleId": "nsapps.dev@gmail.com",
+        "ascAppId": "PASTE_APP_STORE_CONNECT_APP_ID_HERE",
+        "appleTeamId": "PASTE_APPLE_TEAM_ID_HERE"
       }
     }
   }
