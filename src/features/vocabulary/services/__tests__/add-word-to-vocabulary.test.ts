@@ -66,6 +66,48 @@ describe('addSelectionToVocabulary', () => {
     expect(mockedApiClient.resolveVocabularyPack).not.toHaveBeenCalled();
   });
 
+  it('allows one-letter words so lesson text can resolve every dictionary word', async () => {
+    const userId = 'user-one-letter';
+    const vocabularyItem = createVocabularyItem({
+      id: 'one-letter-item',
+      userId,
+      word: 'i',
+      translation: 'ես',
+    });
+
+    mockedApiClient.resolveVocabularyPack.mockResolvedValue({
+      vocabulary: [vocabularyItem],
+      resolved: 1,
+      received: 1,
+    });
+
+    const result = await addSelectionToVocabulary('token-one-letter', userId, 'I');
+
+    expect(result.ok).toBe(true);
+    expect(mockedApiClient.resolveVocabularyPack).toHaveBeenCalledWith('token-one-letter', ['i']);
+  });
+
+  it('normalizes possessive lesson tokens to the same key as backend ingestion', async () => {
+    const userId = 'user-possessive';
+    const vocabularyItem = createVocabularyItem({
+      id: 'possessive-item',
+      userId,
+      word: 'louis',
+      translation: 'Լուի',
+    });
+
+    mockedApiClient.resolveVocabularyPack.mockResolvedValue({
+      vocabulary: [vocabularyItem],
+      resolved: 1,
+      received: 1,
+    });
+
+    const result = await addSelectionToVocabulary('token-possessive', userId, "Louis's");
+
+    expect(result.ok).toBe(true);
+    expect(mockedApiClient.resolveVocabularyPack).toHaveBeenCalledWith('token-possessive', ['louis']);
+  });
+
   it('adds selection via pack endpoint and merges it into user cache', async () => {
     const userId = 'user-pack-success';
     const vocabularyItem = createVocabularyItem({

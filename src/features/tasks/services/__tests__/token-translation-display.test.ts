@@ -1,0 +1,60 @@
+import {
+  getTokenTranslationDisplay,
+  shouldRevealTokenTranslation,
+} from '../token-translation-display';
+
+describe('getTokenTranslationDisplay', () => {
+  it('hides translations until the word is marked unknown', () => {
+    const result = getTokenTranslationDisplay(
+      [
+        {
+          id: 'tr-1',
+          entryId: 'entry-1',
+          languageCode: 'hy',
+          translation: 'բարև',
+          usageExample: null,
+        },
+      ],
+      false,
+    );
+
+    expect(result).toEqual({ text: ' ', visible: false });
+  });
+
+  it('reveals the Armenian translation after the word is marked unknown', () => {
+    const result = getTokenTranslationDisplay(
+      [
+        {
+          id: 'tr-1',
+          entryId: 'entry-1',
+          languageCode: 'hy',
+          translation: 'բարև',
+          usageExample: null,
+        },
+      ],
+      true,
+    );
+
+    expect(result).toEqual({ text: 'բարև', visible: true });
+  });
+
+  it('shows a dash when the word is marked unknown but has no translation yet', () => {
+    const result = getTokenTranslationDisplay([], true);
+
+    expect(result).toEqual({ text: '—', visible: true });
+  });
+});
+
+describe('shouldRevealTokenTranslation', () => {
+  it('reveals translations for words already saved in vocabulary', () => {
+    expect(shouldRevealTokenTranslation(true, false)).toBe(true);
+  });
+
+  it('reveals translations for newly marked unknown words', () => {
+    expect(shouldRevealTokenTranslation(false, true)).toBe(true);
+  });
+
+  it('keeps unsaved words hidden until marked unknown', () => {
+    expect(shouldRevealTokenTranslation(false, false)).toBe(false);
+  });
+});

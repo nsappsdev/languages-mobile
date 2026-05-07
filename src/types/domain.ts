@@ -26,6 +26,8 @@ export interface Lesson {
   createdAt?: string;
   updatedAt?: string;
   items: LessonItem[];
+  dictionary?: VocabularyEntry[];
+  dictionaryCoverage?: LessonDictionaryCoverageItem[];
 }
 
 export interface User {
@@ -74,6 +76,16 @@ export interface VocabularyEntry {
   kind: VocabularyKind;
   notes?: string | null;
   tags: string[];
+  translations: VocabularyTranslation[];
+}
+
+export interface LessonDictionaryCoverageItem {
+  text: string;
+  normalizedText: string;
+  kind: VocabularyKind;
+  entryId: string | null;
+  hasTranslation: boolean;
+  hasArmenianTranslation: boolean;
   translations: VocabularyTranslation[];
 }
 

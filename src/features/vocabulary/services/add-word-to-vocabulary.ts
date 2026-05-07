@@ -121,11 +121,14 @@ export async function addSelectionToVocabulary(
 export function normalizeVocabularySelection(value: string): string | null {
   const cleaned = value
     .trim()
+    .replace(/[’]/g, "'")
     .replace(/\s+/g, ' ')
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '')
+    .replace(/(^'+|'+$)/g, '')
+    .replace(/'s$/i, '')
     .toLowerCase();
 
-  if (cleaned.length < 2) {
+  if (cleaned.length < 1) {
     return null;
   }
 

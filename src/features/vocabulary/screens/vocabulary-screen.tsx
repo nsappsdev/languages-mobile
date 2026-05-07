@@ -27,6 +27,7 @@ import {
   getQueuedVocabularyStatusUpdates,
   queueVocabularyStatusUpdate,
 } from '@/src/features/vocabulary/services/vocabulary-status-sync';
+import { pickArmenianTranslationText } from '@/src/features/vocabulary/services/translation-display';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
@@ -513,9 +514,8 @@ export function VocabularyScreen() {
                   <View style={styles.sectionEntries}>
                     {item.items.slice(0, 6).map((entry) => {
                       const translation =
-                        entry.entry.translations.find(
-                          (itemTranslation) => itemTranslation.languageCode === 'am',
-                        )?.translation ?? 'No Armenian translation yet.';
+                        pickArmenianTranslationText(entry.entry.translations) ??
+                        'No Armenian translation yet.';
 
                       return (
                         <View key={entry.id} style={styles.card}>

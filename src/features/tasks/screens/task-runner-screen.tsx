@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -19,11 +20,24 @@ import {
   ensureAudioCached,
   prefetchAudio,
 } from '@/src/features/tasks/services/audio-cache';
+import {
+  getCachedLessonDictionary,
+  setCachedLessonDictionary,
+} from '@/src/features/tasks/services/lesson-dictionary-cache';
+import {
+  getTokenTranslationDisplay,
+  shouldAllowVocabularyToggle,
+  shouldRevealTokenTranslation,
+} from '@/src/features/tasks/services/token-translation-display';
 import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
 import {
-  addSelectionToVocabulary,
+  getTokenSegmentIds,
+} from '@/src/features/tasks/screens/task-runner-segments';
+import {
   normalizeVocabularySelection,
+  addSelectionToVocabulary,
 } from '@/src/features/vocabulary/services/add-word-to-vocabulary';
+import { pickArmenianTranslationText } from '@/src/features/vocabulary/services/translation-display';
 import {
   getCachedVocabulary,
   mergeCachedVocabulary,
@@ -59,6 +73,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     {},
   );
   const [pendingWords, setPendingWords] = useState<Record<string, true>>({});
+  const [unknownTaps, setUnknownTaps] = useState<Record<string, true>>({});
   const [entryCacheByText, setEntryCacheByText] = useState<Record<string, VocabularyEntry>>({});
   const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
   const [isAudioCaching, setIsAudioCaching] = useState(false);
@@ -73,13 +88,29 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       return;
     }
 
+    let cancelled = false;
+
+    const seedFromCache = async () => {
+      const cached = await getCachedLessonDictionary(lessonId);
+      if (!cancelled && cached.length) {
+        setEntryCacheByText(buildEntryCacheByText(cached));
+      }
+    };
+
     const load = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const response = await apiClient.getLesson(token, lessonId);
+        if (cancelled) return;
         setLesson(response.lesson);
+        const dictionary = response.lesson.dictionary ?? [];
+        if (dictionary.length) {
+          setEntryCacheByText((prev) => ({ ...prev, ...buildEntryCacheByText(dictionary) }));
+          void setCachedLessonDictionary(lessonId, dictionary);
+        }
       } catch (err) {
+        if (cancelled) return;
         if (err instanceof ApiError) {
           setError(err.message);
         } else if (err instanceof Error) {
@@ -88,11 +119,16 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           setError('Failed to load lesson.');
         }
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
+    seedFromCache().catch(() => null);
     load().catch(() => null);
+
+    return () => {
+      cancelled = true;
+    };
   }, [lessonId, token, user?.id]);
 
   useEffect(() => {
@@ -132,52 +168,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     void setActiveLesson(user.id, lessonId);
   }, [lessonId, user?.id]);
 
-  useEffect(() => {
-    if (!token || !lesson) return;
-
-    const uniqueTokens = Array.from(
-      new Set(
-        lesson.items.flatMap((item) =>
-          tokenizeLessonText(item.text)
-            .map((t) => t.normalized)
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ),
-    );
-
-    if (uniqueTokens.length === 0) return;
-
-    let cancelled = false;
-
-    const prefetchTranslations = async () => {
-      const chunks: string[][] = [];
-      for (let i = 0; i < uniqueTokens.length; i += 100) {
-        chunks.push(uniqueTokens.slice(i, i + 100));
-      }
-
-      const accumulated: Record<string, VocabularyEntry> = {};
-      for (const chunk of chunks) {
-        try {
-          const response = await apiClient.lookupVocabularyEntries(token, chunk);
-          for (const entry of response.entries) {
-            accumulated[entry.englishText.trim().toLowerCase()] = entry;
-          }
-        } catch {
-          // Prefetch best-effort; skip failed chunks.
-        }
-      }
-
-      if (!cancelled && Object.keys(accumulated).length > 0) {
-        setEntryCacheByText((prev) => ({ ...prev, ...accumulated }));
-      }
-    };
-
-    prefetchTranslations().catch(() => null);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [lesson, token]);
 
   const items = useMemo(
     () => (lesson ? [...lesson.items].sort((left, right) => left.order - right.order) : []),
@@ -194,6 +184,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
   useEffect(() => {
     setVocabularyNotice(null);
+    setUnknownTaps({});
   }, [currentItemIndex]);
 
   useEffect(() => {
@@ -308,42 +299,20 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     [currentItem],
   );
 
-  /**
-   * Maps each word token index → the segment ID it belongs to (by character
-   * offset in the full item text), or null if the token is not in any segment.
-   */
   const tokenSegmentIds = useMemo((): (string | null)[] => {
     if (!currentItem || !currentItem.segments.length) {
       return wordTokens.map(() => null);
     }
-    const fullText = currentItem.text;
-    const segments = currentItem.segments;
-    const result: (string | null)[] = [];
-    let charPos = 0;
-
-    for (const tok of wordTokens) {
-      const start = charPos;
-      const end = start + tok.text.length;
-      charPos = end;
-
-      if (!tok.normalized) {
-        result.push(null);
-        continue;
-      }
-
-      let found: string | null = null;
-      for (const seg of segments) {
-        const segStart = fullText.indexOf(seg.text);
-        if (segStart !== -1 && start >= segStart && end <= segStart + seg.text.length) {
-          found = seg.id;
-          break;
-        }
-      }
-      result.push(found);
-    }
-
-    return result;
+    return getTokenSegmentIds(wordTokens, currentItem.text, currentItem.segments);
   }, [currentItem, wordTokens]);
+
+  const segmentStartById = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const segment of currentItem?.segments ?? []) {
+      result[segment.id] = segment.startMs;
+    }
+    return result;
+  }, [currentItem]);
 
   const startPlayback = useCallback(async () => {
     const duration = playbackStatus.duration ?? 0;
@@ -384,6 +353,17 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       player.play();
     });
   }, [playableAudioUrl, player]);
+
+  const isPlaying = playbackStatus.playing;
+
+  const handleSeekToSegment = useCallback(
+    (startMs: number | null) => {
+      if (!isPlaying || startMs === null) return;
+      const startSeconds = startMs / 1000;
+      void player.seekTo(startSeconds);
+    },
+    [isPlaying, player],
+  );
 
   const completeCurrentItem = useCallback(() => {
     if (!currentItem || completedItemIds[currentItem.id]) {
@@ -491,19 +471,24 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           delete next[normalizedWord];
           return next;
         });
+        setUnknownTaps((prev) => {
+          const next = { ...prev };
+          delete next[normalizedWord];
+          return next;
+        });
         setVocabularyNotice(`Removed "${existingItem.entry.englishText}" from vocabulary.`);
 
         void removeCachedVocabulary(user.id, existingItem.entryId).catch(() => null);
-        void apiClient
-          .removeVocabularyFromLearner(token, existingItem.entryId)
-          .catch((error) => {
-            if (error instanceof ApiError && error.status === 404) return;
-            // Network failure leaves server out of sync; user can retap to retry.
-          });
+        void apiClient.removeVocabularyFromLearner(token, existingItem.entryId).catch((error) => {
+          if (error instanceof ApiError && error.status === 404) return;
+        });
         return;
       }
 
       const prefetched = entryCacheByText[normalizedWord];
+
+      // Synchronous render-path state — runs in the same React event tick so
+      // the translation row updates in the same frame as the tap.
       if (prefetched) {
         const nowIso = new Date().toISOString();
         const optimisticItem: LearnerVocabularyItem = {
@@ -516,45 +501,54 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           entry: prefetched,
         };
         setVocabularyByText((prev) => ({ ...prev, [normalizedWord]: optimisticItem }));
-        const translation = prefetched.translations[0]?.translation;
+        setUnknownTaps((prev) => ({ ...prev, [normalizedWord]: true }));
+        const translation = pickArmenianTranslationText(prefetched.translations);
         setVocabularyNotice(
           translation
-            ? `Added "${prefetched.englishText}" to vocabulary. Translation: ${translation}`
-            : `Added "${prefetched.englishText}" to vocabulary.`,
+            ? `Marked "${prefetched.englishText}" as unknown. Translation: ${translation}`
+            : `Marked "${prefetched.englishText}" as unknown. No Armenian translation yet.`,
         );
       } else {
-        setVocabularyNotice(`Saving "${rawWord}"...`);
+        setUnknownTaps((prev) => ({ ...prev, [normalizedWord]: true }));
+        setVocabularyNotice(`Marked "${rawWord}" as unknown. No translation available yet.`);
       }
 
       setPendingWords((prev) => ({ ...prev, [normalizedWord]: true }));
 
+      // Async persistence — must not block render.
       void (async () => {
         try {
-          const result = await addSelectionToVocabulary(token, user.id, rawWord);
-          if (result.ok && result.vocabulary) {
-            const addedVocabulary = result.vocabulary;
-            const normalizedEntryKey = normalizeVocabularySelection(
-              addedVocabulary.entry.englishText,
-            );
+          if (prefetched) {
+            const response = await apiClient.addVocabularyToLearner(token, prefetched.id);
+            const added = response.vocabulary;
+            const normalizedEntryKey = normalizeVocabularySelection(added.entry.englishText);
             setVocabularyByText((prev) => ({
               ...prev,
-              ...(normalizedEntryKey ? { [normalizedEntryKey]: addedVocabulary } : {}),
+              ...(normalizedEntryKey ? { [normalizedEntryKey]: added } : {}),
             }));
-            if (!prefetched) {
-              setVocabularyNotice(result.message);
-            }
-          } else if (!result.ok) {
-            setVocabularyByText((prev) => {
-              if (!prev[normalizedWord]?.id.startsWith('optimistic:')) return prev;
-              const next = { ...prev };
-              delete next[normalizedWord];
-              return next;
-            });
-            setVocabularyNotice(result.message);
+            await mergeCachedVocabulary(user.id, [added]);
+            return;
           }
+          const result = await addSelectionToVocabulary(token, user.id, rawWord);
+          if (!result.ok || !result.vocabulary) {
+            throw new Error(result.message);
+          }
+
+          const addedVocabulary = result.vocabulary;
+          const normalizedEntryKey = normalizeVocabularySelection(addedVocabulary.entry.englishText);
+          setVocabularyByText((prev) => ({
+            ...prev,
+            ...(normalizedEntryKey ? { [normalizedEntryKey]: addedVocabulary } : {}),
+          }));
+
         } catch (error) {
           setVocabularyByText((prev) => {
             if (!prev[normalizedWord]?.id.startsWith('optimistic:')) return prev;
+            const next = { ...prev };
+            delete next[normalizedWord];
+            return next;
+          });
+          setUnknownTaps((prev) => {
             const next = { ...prev };
             delete next[normalizedWord];
             return next;
@@ -625,8 +619,40 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const audioSourceLabel = playableAudioUrl?.startsWith('file://') ? 'Cached' : 'Streaming';
 
   return (
-    <ScreenContainer scroll>
-      <View>
+    <ScreenContainer>
+      <View style={styles.runnerLayout}>
+        <View style={styles.audioDock}>
+          <Pressable
+            onPress={handleTogglePlayback}
+            disabled={!playableAudioUrl}
+            accessibilityRole="button"
+            accessibilityLabel={playbackStatus.playing ? 'Pause audio' : 'Play audio'}
+            style={({ pressed }) => [
+              styles.audioIconButton,
+              !playableAudioUrl && styles.audioIconButtonDisabled,
+              pressed && playableAudioUrl && styles.audioIconButtonPressed,
+            ]}>
+            <Ionicons
+              name={playbackStatus.playing ? 'pause' : 'play'}
+              size={24}
+              color={neutral[0]}
+            />
+          </Pressable>
+          <Pressable
+            onPress={handleReplay}
+            disabled={!playableAudioUrl}
+            accessibilityRole="button"
+            accessibilityLabel="Replay audio"
+            style={({ pressed }) => [
+              styles.audioIconButtonSecondary,
+              !playableAudioUrl && styles.audioIconButtonDisabled,
+              pressed && playableAudioUrl && styles.audioIconButtonPressed,
+            ]}>
+            <Ionicons name="refresh" size={22} color={brand[700]} />
+          </Pressable>
+        </View>
+
+        <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
@@ -648,9 +674,8 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           </View>
         </View>
 
-        {/* Single unified content card */}
+        {/* Single unified content card (audioActions removed — now sticky above) */}
         <View style={styles.card}>
-          {/* Card top row: item label + audio status + time */}
           <View style={styles.cardTopRow}>
             <Text style={styles.itemLabel}>Item {currentItemIndex + 1}</Text>
             <View style={styles.audioMetaRow}>
@@ -663,48 +688,69 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             </View>
           </View>
 
-          {/* Word flow — every word token reserves a fixed-height translation row
-              so showing/hiding translations never causes a layout shift */}
           <View style={styles.wordFlow}>
             {wordTokens.map((tok, idx) => {
+              const segmentId = tokenSegmentIds[idx];
+              const isActiveSegment = segmentId !== null && segmentId === activeSegmentId;
+              const segmentStartMs = segmentId ? segmentStartById[segmentId] ?? null : null;
               if (!tok.normalized) {
-                // Whitespace — not tappable, no translation row needed
                 return (
-                  <Text key={tok.key} style={styles.wordWhitespace}>
+                  <Text
+                    key={tok.key}
+                    style={[styles.wordWhitespace, isActiveSegment && styles.tokenWordActive]}>
                     {tok.text}
                   </Text>
                 );
               }
-
-              const isInActiveSegment =
-                activeSegmentId !== null && tokenSegmentIds[idx] === activeSegmentId;
               const isSelected = Boolean(vocabularyByText[tok.normalized]);
               const isPending = Boolean(pendingWords[tok.normalized]);
-              const armenianTranslation =
-                vocabularyByText[tok.normalized]?.entry.translations.find(
-                  (t) => t.languageCode === 'am',
-                )?.translation ?? null;
-
+              const normalizedWord = tok.normalized;
+              const revealTranslation = shouldRevealTokenTranslation(
+                Boolean(vocabularyByText[normalizedWord]),
+                Boolean(unknownTaps[normalizedWord]),
+              );
+              const translationsForToken =
+                vocabularyByText[normalizedWord]?.entry.translations
+                ?? entryCacheByText[normalizedWord]?.translations
+                ?? [];
+              const tokenTranslation = getTokenTranslationDisplay(
+                translationsForToken,
+                revealTranslation,
+              );
               return (
                 <Pressable
                   key={tok.key}
-                  onPress={() => void handleToggleWordVocabulary(tok.text, tok.normalized)}
+                  onPress={() => {
+                    if (isPlaying) {
+                      handleSeekToSegment(segmentStartMs);
+                      return;
+                    }
+                    if (!shouldAllowVocabularyToggle(
+                      Boolean(vocabularyByText[normalizedWord]),
+                      translationsForToken.some(
+                        (translation) => translation.languageCode.toLowerCase() === 'hy',
+                      ),
+                    )) {
+                      return;
+                    }
+                    void handleToggleWordVocabulary(tok.text, normalizedWord);
+                  }}
+                  disabled={isPlaying && segmentStartMs === null}
                   style={styles.tokenWrapper}>
-                  {/* Translation row — always present at fixed height; invisible when empty */}
                   <Text
                     numberOfLines={1}
                     style={[
                       styles.tokenTranslation,
-                      !armenianTranslation && styles.tokenTranslationHidden,
+                      !tokenTranslation.visible && styles.tokenTranslationHidden,
                     ]}>
-                    {armenianTranslation ?? '\u00A0'}
+                    {tokenTranslation.text}
                   </Text>
-                  {/* Word — background changes on active segment; color changes on saved/pending */}
                   <Text
                     style={[
                       styles.tokenWord,
-                      isInActiveSegment && styles.tokenWordActive,
+                      isActiveSegment && styles.tokenWordActive,
                       isSelected && styles.tokenWordSaved,
+                      revealTranslation && !isSelected && styles.tokenWordUnknown,
                       isPending && styles.tokenWordPending,
                     ]}>
                     {tok.text}
@@ -714,41 +760,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             })}
           </View>
 
-          {vocabularyNotice ? (
-            <Text style={styles.notice}>{vocabularyNotice}</Text>
-          ) : null}
-
-          {/* Audio controls */}
-          <View style={styles.audioActions}>
-            <Pressable
-              onPress={handleTogglePlayback}
-              disabled={!playableAudioUrl}
-              accessibilityRole="button"
-              accessibilityLabel={playbackStatus.playing ? 'Pause audio' : 'Play audio'}
-              style={({ pressed }) => [
-                styles.audioIconButton,
-                !playableAudioUrl && styles.audioIconButtonDisabled,
-                pressed && playableAudioUrl && styles.audioIconButtonPressed,
-              ]}>
-              <Ionicons
-                name={playbackStatus.playing ? 'pause' : 'play'}
-                size={24}
-                color={neutral[0]}
-              />
-            </Pressable>
-            <Pressable
-              onPress={handleReplay}
-              disabled={!playableAudioUrl}
-              accessibilityRole="button"
-              accessibilityLabel="Replay audio"
-              style={({ pressed }) => [
-                styles.audioIconButtonSecondary,
-                !playableAudioUrl && styles.audioIconButtonDisabled,
-                pressed && playableAudioUrl && styles.audioIconButtonPressed,
-              ]}>
-              <Ionicons name="refresh" size={22} color={brand[700]} />
-            </Pressable>
-          </View>
+          {vocabularyNotice ? <Text style={styles.notice}>{vocabularyNotice}</Text> : null}
         </View>
 
         {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
@@ -767,6 +779,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             }}
           />
         </View>
+      </ScrollView>
       </View>
     </ScreenContainer>
   );
@@ -777,6 +790,16 @@ function createVocabularyLookup(items: LearnerVocabularyItem[]) {
     const normalized = normalizeVocabularySelection(item.entry.englishText);
     if (normalized) {
       acc[normalized] = item;
+    }
+    return acc;
+  }, {});
+}
+
+function buildEntryCacheByText(entries: VocabularyEntry[]) {
+  return entries.reduce<Record<string, VocabularyEntry>>((acc, entry) => {
+    const normalized = normalizeVocabularySelection(entry.englishText);
+    if (normalized) {
+      acc[normalized] = entry;
     }
     return acc;
   }, {});
@@ -904,6 +927,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     textAlign: 'right',
   },
+  runnerLayout: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 18,
+  },
   // ── Word flow ───────────────────────────────────────────────────────────────
   wordFlow: {
     alignItems: 'flex-end',
@@ -927,11 +957,10 @@ const styles = StyleSheet.create({
   tokenWrapper: {
     alignItems: 'center',
     marginBottom: 4,
-    marginHorizontal: 1,
   },
   /** Fixed height = always reserves space; opacity 0 hides it when empty. */
   tokenTranslation: {
-    color: brand[700],
+    color: '#0f766e',
     fontSize: 10,
     fontWeight: fontWeight.bold,
     height: 13,
@@ -946,26 +975,29 @@ const styles = StyleSheet.create({
     color: text.primary,
     fontSize: 18,
     lineHeight: 24,
-    overflow: 'hidden',
     paddingHorizontal: 3,
   },
-  /** Active segment: teal background tint — no size change. */
   tokenWordActive: {
-    backgroundColor: brand[50],
-    color: brand[800],
+    backgroundColor: '#dbeafe',
   },
   /** Word saved to vocabulary. */
   tokenWordSaved: {
-    color: text.brand,
+    color: '#1d4ed8',
+  },
+  /** Word marked unknown for the current lesson. */
+  tokenWordUnknown: {
+    color: '#c2410c',
   },
   /** Vocabulary toggle in-flight. */
   tokenWordPending: {
-    color: text.warning,
+    color: '#b45309',
   },
   // ── Audio controls ──────────────────────────────────────────────────────────
-  audioActions: {
+  audioDock: {
+    backgroundColor: surface.page,
     flexDirection: 'row',
     gap: 12,
+    paddingBottom: 10,
   },
   audioIconButton: {
     alignItems: 'center',

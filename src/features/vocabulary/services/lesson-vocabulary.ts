@@ -85,9 +85,9 @@ function collectLessonWords(lesson: Lesson) {
 
 function matchesVocabularySearch(item: LearnerVocabularyItem, normalizedQuery: string) {
   const english = item.entry.englishText.toLowerCase();
-  const armenian = item.entry.translations
-    .filter((translation) => translation.languageCode === 'am')
-    .map((translation) => translation.translation.toLowerCase());
+  const translations = item.entry.translations.map((translation) =>
+    translation.translation.toLowerCase(),
+  );
 
-  return english.includes(normalizedQuery) || armenian.some((value) => value.includes(normalizedQuery));
+  return english.includes(normalizedQuery) || translations.some((value) => value.includes(normalizedQuery));
 }
