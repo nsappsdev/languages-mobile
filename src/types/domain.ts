@@ -9,6 +9,24 @@ export interface LessonItemSegment {
   endMs: number;
 }
 
+export interface LessonItemWordTiming {
+  id: string;
+  text: string;
+  normalizedText: string;
+  startMs: number;
+  endMs: number;
+  order: number;
+}
+
+export interface LessonItemSentenceTiming {
+  id: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  wordMarkIds: string[];
+  order: number;
+}
+
 export interface LessonItem {
   id: string;
   lessonId: string;
@@ -16,6 +34,8 @@ export interface LessonItem {
   text: string;
   audioUrl: string;
   segments: LessonItemSegment[];
+  wordTimings: LessonItemWordTiming[];
+  sentenceTimings: LessonItemSentenceTiming[];
 }
 
 export interface Lesson {
@@ -109,4 +129,31 @@ export interface ProgressEvent {
   completion?: number;
   clientTimestamp?: string;
   payload?: Record<string, unknown>;
+}
+
+export type ReadingModeId = 'introduction' | 'teaching' | 'deep_learning';
+
+export interface ReadingModeSettings {
+  id: ReadingModeId;
+  enabled: boolean;
+  displayName: string;
+  order: number;
+  unknownWordRepetitions?: number;
+  repeatSentenceWhenUnknownCountAtLeast?: number;
+  sentenceRepetitions?: number;
+}
+
+export interface AppSettings {
+  id: string;
+  readingModes: ReadingModeSettings[];
+  mainTextFontFamily: string;
+  mainTextFontSize: number;
+  translationFontFamily: string;
+  translationFontSize: number;
+  translationFontMinSize: number;
+  translationFontMaxSize: number;
+  translationLetterSpacingMin: number;
+  translationLetterSpacingMax: number;
+  createdAt: string;
+  updatedAt: string;
 }

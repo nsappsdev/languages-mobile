@@ -5,6 +5,7 @@ import type {
   LearnerVocabularyStatus,
   Lesson,
   LoginResponse,
+  AppSettings,
   ProgressEvent,
   ResendVerificationResponse,
   SignupResponse,
@@ -210,6 +211,13 @@ export const apiClient = {
 
   getLesson(token: string, lessonId: string) {
     return request<{ lesson: Lesson }>(`/lessons/${lessonId}`, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  getSettings(token: string) {
+    return request<{ settings: AppSettings }>('/settings', {
       method: 'GET',
       token,
     });

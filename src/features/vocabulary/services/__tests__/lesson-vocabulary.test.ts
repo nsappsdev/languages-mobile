@@ -15,6 +15,8 @@ function createLesson(id: string, title: string, text: string): Lesson {
         text,
         audioUrl: '',
         segments: [],
+        wordTimings: [],
+        sentenceTimings: [],
       },
     ],
   };
