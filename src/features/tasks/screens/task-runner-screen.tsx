@@ -1,8 +1,11 @@
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -49,9 +52,13 @@ import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } fr
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import type {
+  AppSettings,
   LearnerVocabularyItem,
   Lesson,
+  LessonItem,
   ProgressEvent,
+  ReadingModeId,
+  ReadingModeSettings,
   VocabularyEntry,
 } from '@/src/types/domain';
 
@@ -59,10 +66,41 @@ interface TaskRunnerScreenProps {
   lessonId: string;
 }
 
+type PlaybackRange = {
+  startMs: number;
+  endMs: number;
+  pulseNormalizedWord?: string;
+};
+
+const TOKEN_WORD_FONT_SIZE = 18;
+const TOKEN_WORD_LINE_HEIGHT = 24;
+const TOKEN_WORD_HORIZONTAL_PADDING = 3;
+
+const DEFAULT_READING_MODES: ReadingModeSettings[] = [
+  { id: 'introduction', enabled: true, displayName: 'Introduction', order: 0 },
+  {
+    id: 'teaching',
+    enabled: true,
+    displayName: 'Teaching',
+    order: 1,
+    unknownWordRepetitions: 5,
+  },
+  {
+    id: 'deep_learning',
+    enabled: true,
+    displayName: 'Deep Learning',
+    order: 2,
+    unknownWordRepetitions: 5,
+    repeatSentenceWhenUnknownCountAtLeast: 2,
+    sentenceRepetitions: 2,
+  },
+];
+
 export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const router = useRouter();
   const { token, user } = useSession();
   const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -77,10 +115,60 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const [entryCacheByText, setEntryCacheByText] = useState<Record<string, VocabularyEntry>>({});
   const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
   const [isAudioCaching, setIsAudioCaching] = useState(false);
+  const [activeModeId, setActiveModeId] = useState<ReadingModeId | null>(null);
   const startedItemIdsRef = useRef<Set<string>>(new Set());
+  const modePlaybackRunIdRef = useRef(0);
+  const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
   const handleGoToDashboard = useCallback(() => {
     router.replace('/(tabs)/lessons');
   }, [router]);
+
+  const triggerTokenFeedback = useCallback((normalizedWord: string) => {
+    const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
+    tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
+    pulseValue.stopAnimation(() => {
+      pulseValue.setValue(0);
+      Animated.sequence([
+        Animated.timing(pulseValue, {
+          toValue: 1,
+          duration: 120,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseValue, {
+          toValue: 0,
+          duration: 180,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+    void Haptics.selectionAsync().catch(() => null);
+  }, []);
+
+  const triggerTranslationHeartbeat = useCallback((normalizedWord: string, durationMs: number) => {
+    const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
+    tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
+    const halfDuration = Math.max(80, Math.min(Math.floor(durationMs / 2), 220));
+
+    pulseValue.stopAnimation(() => {
+      pulseValue.setValue(0);
+      Animated.sequence([
+        Animated.timing(pulseValue, {
+          toValue: 1,
+          duration: halfDuration,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseValue, {
+          toValue: 0,
+          duration: halfDuration,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, []);
 
   useEffect(() => {
     if (!token || !lessonId) {
@@ -101,10 +189,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await apiClient.getLesson(token, lessonId);
+        const [lessonResponse, settingsResponse] = await Promise.all([
+          apiClient.getLesson(token, lessonId),
+          apiClient.getSettings(token),
+        ]);
         if (cancelled) return;
-        setLesson(response.lesson);
-        const dictionary = response.lesson.dictionary ?? [];
+        setLesson(lessonResponse.lesson);
+        setAppSettings(settingsResponse.settings);
+        const dictionary = lessonResponse.lesson.dictionary ?? [];
         if (dictionary.length) {
           setEntryCacheByText((prev) => ({ ...prev, ...buildEntryCacheByText(dictionary) }));
           void setCachedLessonDictionary(lessonId, dictionary);
@@ -182,10 +274,24 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const player = useAudioPlayer(playableAudioUrl ?? undefined, { updateInterval: 200 });
   const playbackStatus = useAudioPlayerStatus(player);
 
+  const getTokenPulseValue = useCallback((normalizedWord: string) => {
+    const existing = tokenPulseValuesRef.current.get(normalizedWord);
+    if (existing) {
+      return existing;
+    }
+
+    const next = new Animated.Value(0);
+    tokenPulseValuesRef.current.set(normalizedWord, next);
+    return next;
+  }, []);
+
   useEffect(() => {
     setVocabularyNotice(null);
     setUnknownTaps({});
-  }, [currentItemIndex]);
+    setActiveModeId(null);
+    modePlaybackRunIdRef.current += 1;
+    player.pause();
+  }, [currentItemIndex, player]);
 
   useEffect(() => {
     if (!token) return;
@@ -314,47 +420,129 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return result;
   }, [currentItem]);
 
-  const startPlayback = useCallback(async () => {
-    const duration = playbackStatus.duration ?? 0;
-    const currentTime = playbackStatus.currentTime ?? 0;
-    const didReachEnd =
-      playbackStatus.didJustFinish ||
-      (duration > 0 && currentTime >= Math.max(duration - 0.05, 0));
-
-    if (didReachEnd) {
-      await player.seekTo(0);
-    }
-
-    player.play();
-  }, [playbackStatus.currentTime, playbackStatus.didJustFinish, playbackStatus.duration, player]);
-
-  const handleTogglePlayback = useCallback(() => {
-    if (!playableAudioUrl) {
-      setVocabularyNotice('This item does not have a playable audio source yet.');
-      return;
-    }
-
-    setVocabularyNotice(null);
-    if (playbackStatus.playing) {
-      player.pause();
-      return;
-    }
-
-    void startPlayback();
-  }, [playableAudioUrl, playbackStatus.playing, player, startPlayback]);
-
-  const handleReplay = useCallback(() => {
-    if (!playableAudioUrl) {
-      return;
-    }
-
-    setVocabularyNotice(null);
-    void player.seekTo(0).then(() => {
-      player.play();
-    });
-  }, [playableAudioUrl, player]);
-
   const isPlaying = playbackStatus.playing;
+
+  useEffect(() => {
+    if (playbackStatus.didJustFinish) {
+      setActiveModeId(null);
+      modePlaybackRunIdRef.current += 1;
+    }
+  }, [playbackStatus.didJustFinish]);
+
+  const readingModes = useMemo(
+    () =>
+      [...(appSettings?.readingModes ?? DEFAULT_READING_MODES)]
+        .filter((mode) => mode.enabled)
+        .sort((left, right) => left.order - right.order),
+    [appSettings?.readingModes],
+  );
+
+  const unknownNormalizedWords = useMemo(() => {
+    const words = new Set<string>();
+    for (const normalizedWord of Object.keys(vocabularyByText)) {
+      words.add(normalizedWord);
+    }
+    for (const normalizedWord of Object.keys(unknownTaps)) {
+      words.add(normalizedWord);
+    }
+    return words;
+  }, [unknownTaps, vocabularyByText]);
+
+  const getModeDisabledReason = useCallback(
+    (modeId: ReadingModeId) => {
+      if (!playableAudioUrl) {
+        return 'This item does not have a playable audio source yet.';
+      }
+      if (modeId === 'teaching' && !currentItem?.wordTimings?.length) {
+        return 'Teaching needs word timing ranges for this item.';
+      }
+      if (
+        modeId === 'deep_learning' &&
+        (!currentItem?.wordTimings?.length || !currentItem?.sentenceTimings?.length)
+      ) {
+        return 'Deep Learning needs word and sentence timing ranges for this item.';
+      }
+      return null;
+    },
+    [currentItem?.sentenceTimings?.length, currentItem?.wordTimings?.length, playableAudioUrl],
+  );
+
+  const runRangeScript = useCallback(
+    async (ranges: PlaybackRange[], runId: number) => {
+      for (const range of ranges) {
+        if (modePlaybackRunIdRef.current !== runId) return;
+        await player.seekTo(range.startMs / 1000);
+        if (modePlaybackRunIdRef.current !== runId) return;
+        if (range.pulseNormalizedWord) {
+          triggerTranslationHeartbeat(range.pulseNormalizedWord, range.endMs - range.startMs);
+        }
+        player.play();
+        await wait(range.endMs - range.startMs);
+        if (modePlaybackRunIdRef.current !== runId) return;
+      }
+      player.pause();
+      if (modePlaybackRunIdRef.current === runId) {
+        setActiveModeId(null);
+      }
+    },
+    [player, triggerTranslationHeartbeat],
+  );
+
+  const handleToggleReadingMode = useCallback(
+    (mode: ReadingModeSettings) => {
+      const disabledReason = getModeDisabledReason(mode.id);
+      if (disabledReason) {
+        setVocabularyNotice(disabledReason);
+        return;
+      }
+
+      modePlaybackRunIdRef.current += 1;
+      const runId = modePlaybackRunIdRef.current;
+
+      if (activeModeId === mode.id) {
+        player.pause();
+        setActiveModeId(null);
+        return;
+      }
+
+      setVocabularyNotice(null);
+      setActiveModeId(mode.id);
+
+      if (mode.id === 'introduction') {
+        void player.seekTo(0).then(() => {
+          if (modePlaybackRunIdRef.current !== runId) return;
+          player.play();
+        });
+        return;
+      }
+
+      const ranges = currentItem
+        ? buildReadingModeScript({
+            currentItem,
+            durationMs: Math.max(0, Math.round((playbackStatus.duration ?? 0) * 1000)),
+            mode,
+            unknownNormalizedWords,
+          })
+        : [];
+
+      if (!ranges.length) {
+        setVocabularyNotice('This mode needs timing ranges before it can play.');
+        setActiveModeId(null);
+        return;
+      }
+
+      void runRangeScript(ranges, runId);
+    },
+    [
+      activeModeId,
+      currentItem,
+      getModeDisabledReason,
+      playbackStatus.duration,
+      player,
+      runRangeScript,
+      unknownNormalizedWords,
+    ],
+  );
 
   const handleSeekToSegment = useCallback(
     (startMs: number | null) => {
@@ -622,34 +810,33 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     <ScreenContainer>
       <View style={styles.runnerLayout}>
         <View style={styles.audioDock}>
-          <Pressable
-            onPress={handleTogglePlayback}
-            disabled={!playableAudioUrl}
-            accessibilityRole="button"
-            accessibilityLabel={playbackStatus.playing ? 'Pause audio' : 'Play audio'}
-            style={({ pressed }) => [
-              styles.audioIconButton,
-              !playableAudioUrl && styles.audioIconButtonDisabled,
-              pressed && playableAudioUrl && styles.audioIconButtonPressed,
-            ]}>
-            <Ionicons
-              name={playbackStatus.playing ? 'pause' : 'play'}
-              size={24}
-              color={neutral[0]}
-            />
-          </Pressable>
-          <Pressable
-            onPress={handleReplay}
-            disabled={!playableAudioUrl}
-            accessibilityRole="button"
-            accessibilityLabel="Replay audio"
-            style={({ pressed }) => [
-              styles.audioIconButtonSecondary,
-              !playableAudioUrl && styles.audioIconButtonDisabled,
-              pressed && playableAudioUrl && styles.audioIconButtonPressed,
-            ]}>
-            <Ionicons name="refresh" size={22} color={brand[700]} />
-          </Pressable>
+          {readingModes.map((mode) => {
+            const disabledReason = getModeDisabledReason(mode.id);
+            const isActive = activeModeId === mode.id && playbackStatus.playing;
+            return (
+              <Pressable
+                key={mode.id}
+                onPress={() => handleToggleReadingMode(mode)}
+                disabled={Boolean(disabledReason)}
+                accessibilityRole="button"
+                accessibilityLabel={`${isActive ? 'Pause' : 'Play'} ${mode.displayName}`}
+                style={({ pressed }) => [
+                  styles.modeButton,
+                  isActive && styles.modeButtonActive,
+                  disabledReason && styles.audioIconButtonDisabled,
+                  pressed && !disabledReason && styles.audioIconButtonPressed,
+                ]}>
+                <Ionicons
+                  name={isActive ? 'pause' : 'play'}
+                  size={16}
+                  color={isActive ? neutral[0] : brand[700]}
+                />
+                <Text style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}>
+                  {mode.displayName}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -717,44 +904,63 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                 translationsForToken,
                 revealTranslation,
               );
+              const pulseValue = getTokenPulseValue(normalizedWord);
+              const pulseScale = pulseValue.interpolate({
+                inputRange: [0, 0.5, 1],
+                outputRange: [1, 1.08, 1],
+              });
+              const pulseOpacity = pulseValue.interpolate({
+                inputRange: [0, 1],
+                outputRange: [1, 0.98],
+              });
               return (
                 <Pressable
                   key={tok.key}
                   onPress={() => {
                     if (isPlaying) {
+                      triggerTokenFeedback(normalizedWord);
                       handleSeekToSegment(segmentStartMs);
                       return;
                     }
-                    if (!shouldAllowVocabularyToggle(
-                      Boolean(vocabularyByText[normalizedWord]),
-                      translationsForToken.some(
-                        (translation) => translation.languageCode.toLowerCase() === 'hy',
-                      ),
-                    )) {
+                    if (
+                      !shouldAllowVocabularyToggle(
+                        Boolean(vocabularyByText[normalizedWord]),
+                        translationsForToken.some(
+                          (translation) => translation.languageCode.toLowerCase() === 'hy',
+                        ),
+                      )
+                    ) {
                       return;
                     }
+                    triggerTokenFeedback(normalizedWord);
                     void handleToggleWordVocabulary(tok.text, normalizedWord);
                   }}
                   disabled={isPlaying && segmentStartMs === null}
                   style={styles.tokenWrapper}>
-                  <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.tokenTranslation,
-                      !tokenTranslation.visible && styles.tokenTranslationHidden,
-                    ]}>
-                    {tokenTranslation.text}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.tokenWord,
-                      isActiveSegment && styles.tokenWordActive,
-                      isSelected && styles.tokenWordSaved,
-                      revealTranslation && !isSelected && styles.tokenWordUnknown,
-                      isPending && styles.tokenWordPending,
-                    ]}>
-                    {tok.text}
-                  </Text>
+                  <View style={styles.tokenPulse}>
+                    <Animated.Text
+                      numberOfLines={1}
+                      style={[
+                        styles.tokenTranslation,
+                        {
+                          opacity: pulseOpacity,
+                          transform: [{ scale: pulseScale }],
+                        },
+                        !tokenTranslation.visible && styles.tokenTranslationHidden,
+                      ]}>
+                      {tokenTranslation.text}
+                    </Animated.Text>
+                    <Text
+                      style={[
+                        styles.tokenWord,
+                        isActiveSegment && styles.tokenWordActive,
+                        isSelected && styles.tokenWordSaved,
+                        revealTranslation && !isSelected && styles.tokenWordUnknown,
+                        isPending && styles.tokenWordPending,
+                      ]}>
+                      {tok.text}
+                    </Text>
+                  </View>
                 </Pressable>
               );
             })}
@@ -826,6 +1032,76 @@ function formatSeconds(value: number) {
   const minutes = Math.floor(wholeSeconds / 60);
   const seconds = wholeSeconds % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(ms, 120));
+  });
+}
+
+function buildReadingModeScript({
+  currentItem,
+  durationMs,
+  mode,
+  unknownNormalizedWords,
+}: {
+  currentItem: LessonItem;
+  durationMs: number;
+  mode: ReadingModeSettings;
+  unknownNormalizedWords: Set<string>;
+}): PlaybackRange[] {
+  const timelineEndMs =
+    durationMs > 0
+      ? durationMs
+      : Math.max(0, ...currentItem.segments.map((segment) => segment.endMs));
+  const ranges: PlaybackRange[] = [];
+  const unknownWordRanges = [...(currentItem.wordTimings ?? [])]
+    .filter((mark) => unknownNormalizedWords.has(mark.normalizedText))
+    .sort((left, right) => left.startMs - right.startMs);
+  const wordRepeatCount = Math.max(1, mode.unknownWordRepetitions ?? 1);
+
+  let cursorMs = 0;
+  for (const mark of unknownWordRanges) {
+    if (mark.startMs > cursorMs) {
+      ranges.push({ startMs: cursorMs, endMs: mark.startMs });
+    }
+    for (let index = 0; index < wordRepeatCount; index += 1) {
+      ranges.push({
+        startMs: mark.startMs,
+        endMs: mark.endMs,
+        pulseNormalizedWord: mark.normalizedText,
+      });
+    }
+    cursorMs = Math.max(cursorMs, mark.endMs);
+  }
+
+  if (timelineEndMs > cursorMs) {
+    ranges.push({ startMs: cursorMs, endMs: timelineEndMs });
+  }
+
+  if (mode.id !== 'deep_learning') {
+    return ranges.filter((range) => range.endMs > range.startMs);
+  }
+
+  const unknownWordIds = new Set(unknownWordRanges.map((mark) => mark.id));
+  const threshold = Math.max(1, mode.repeatSentenceWhenUnknownCountAtLeast ?? 2);
+  const sentenceRepeatCount = Math.max(1, mode.sentenceRepetitions ?? 2);
+  const sentenceRepeats = [...(currentItem.sentenceTimings ?? [])]
+    .filter(
+      (sentence) =>
+        sentence.wordMarkIds.filter((wordMarkId) => unknownWordIds.has(wordMarkId)).length >=
+        threshold,
+    )
+    .sort((left, right) => left.startMs - right.startMs);
+
+  for (const sentence of sentenceRepeats) {
+    for (let index = 0; index < sentenceRepeatCount; index += 1) {
+      ranges.push({ startMs: sentence.startMs, endMs: sentence.endMs });
+    }
+  }
+
+  return ranges.filter((range) => range.endMs > range.startMs);
 }
 
 const styles = StyleSheet.create({
@@ -946,8 +1222,8 @@ const styles = StyleSheet.create({
    */
   wordWhitespace: {
     color: text.primary,
-    fontSize: 18,
-    lineHeight: 24,
+    fontSize: TOKEN_WORD_FONT_SIZE,
+    lineHeight: TOKEN_WORD_LINE_HEIGHT,
     marginBottom: 4,
   },
   /**
@@ -958,7 +1234,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
-  /** Fixed height = always reserves space; opacity 0 hides it when empty. */
+  tokenPulse: {
+    alignItems: 'center',
+  },
   tokenTranslation: {
     color: '#0f766e',
     fontSize: 10,
@@ -973,9 +1251,9 @@ const styles = StyleSheet.create({
   tokenWord: {
     borderRadius: radii.sm,
     color: text.primary,
-    fontSize: 18,
-    lineHeight: 24,
-    paddingHorizontal: 3,
+    fontSize: TOKEN_WORD_FONT_SIZE,
+    lineHeight: TOKEN_WORD_LINE_HEIGHT,
+    paddingHorizontal: TOKEN_WORD_HORIZONTAL_PADDING,
   },
   tokenWordActive: {
     backgroundColor: '#dbeafe',
@@ -996,8 +1274,33 @@ const styles = StyleSheet.create({
   audioDock: {
     backgroundColor: surface.page,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     paddingBottom: 10,
+  },
+  modeButton: {
+    alignItems: 'center',
+    backgroundColor: brand[50],
+    borderColor: border.active,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modeButtonActive: {
+    backgroundColor: brand[700],
+    borderColor: brand[700],
+  },
+  modeButtonText: {
+    color: brand[700],
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+  },
+  modeButtonTextActive: {
+    color: neutral[0],
   },
   audioIconButton: {
     alignItems: 'center',
