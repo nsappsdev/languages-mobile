@@ -69,6 +69,7 @@ interface TaskRunnerScreenProps {
 type PlaybackRange = {
   startMs: number;
   endMs: number;
+  pulseNormalizedWord?: string;
 };
 
 const TOKEN_WORD_FONT_SIZE = 18;
@@ -143,6 +144,30 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       ]).start();
     });
     void Haptics.selectionAsync().catch(() => null);
+  }, []);
+
+  const triggerTranslationHeartbeat = useCallback((normalizedWord: string, durationMs: number) => {
+    const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
+    tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
+    const halfDuration = Math.max(80, Math.min(Math.floor(durationMs / 2), 220));
+
+    pulseValue.stopAnimation(() => {
+      pulseValue.setValue(0);
+      Animated.sequence([
+        Animated.timing(pulseValue, {
+          toValue: 1,
+          duration: halfDuration,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseValue, {
+          toValue: 0,
+          duration: halfDuration,
+          easing: Easing.in(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
   }, []);
 
   useEffect(() => {
@@ -448,6 +473,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         if (modePlaybackRunIdRef.current !== runId) return;
         await player.seekTo(range.startMs / 1000);
         if (modePlaybackRunIdRef.current !== runId) return;
+        if (range.pulseNormalizedWord) {
+          triggerTranslationHeartbeat(range.pulseNormalizedWord, range.endMs - range.startMs);
+        }
         player.play();
         await wait(range.endMs - range.startMs);
         if (modePlaybackRunIdRef.current !== runId) return;
@@ -457,7 +485,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         setActiveModeId(null);
       }
     },
-    [player],
+    [player, triggerTranslationHeartbeat],
   );
 
   const handleToggleReadingMode = useCallback(
@@ -909,22 +937,19 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                   }}
                   disabled={isPlaying && segmentStartMs === null}
                   style={styles.tokenWrapper}>
-                  <Animated.View
-                    style={[
-                      styles.tokenPulse,
-                      {
-                        opacity: pulseOpacity,
-                        transform: [{ scale: pulseScale }],
-                      },
-                    ]}>
-                    <Text
+                  <View style={styles.tokenPulse}>
+                    <Animated.Text
                       numberOfLines={1}
                       style={[
                         styles.tokenTranslation,
+                        {
+                          opacity: pulseOpacity,
+                          transform: [{ scale: pulseScale }],
+                        },
                         !tokenTranslation.visible && styles.tokenTranslationHidden,
                       ]}>
                       {tokenTranslation.text}
-                    </Text>
+                    </Animated.Text>
                     <Text
                       style={[
                         styles.tokenWord,
@@ -935,7 +960,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                       ]}>
                       {tok.text}
                     </Text>
-                  </Animated.View>
+                  </View>
                 </Pressable>
               );
             })}
@@ -1042,7 +1067,11 @@ function buildReadingModeScript({
       ranges.push({ startMs: cursorMs, endMs: mark.startMs });
     }
     for (let index = 0; index < wordRepeatCount; index += 1) {
-      ranges.push({ startMs: mark.startMs, endMs: mark.endMs });
+      ranges.push({
+        startMs: mark.startMs,
+        endMs: mark.endMs,
+        pulseNormalizedWord: mark.normalizedText,
+      });
     }
     cursorMs = Math.max(cursorMs, mark.endMs);
   }
