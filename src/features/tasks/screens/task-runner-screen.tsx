@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { resolveApiAssetUrl } from '@/src/config/env';
@@ -27,6 +28,11 @@ import {
   getCachedLessonDictionary,
   setCachedLessonDictionary,
 } from '@/src/features/tasks/services/lesson-dictionary-cache';
+import {
+  buildReadingModeScript,
+} from '@/src/features/tasks/services/reading-mode-script';
+import type { PlaybackRange } from '@/src/features/tasks/services/reading-mode-script';
+import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
 import {
   getTokenTranslationDisplay,
   shouldAllowVocabularyToggle,
@@ -55,7 +61,6 @@ import type {
   AppSettings,
   LearnerVocabularyItem,
   Lesson,
-  LessonItem,
   ProgressEvent,
   ReadingModeId,
   ReadingModeSettings,
@@ -66,15 +71,11 @@ interface TaskRunnerScreenProps {
   lessonId: string;
 }
 
-type PlaybackRange = {
-  startMs: number;
-  endMs: number;
-  pulseNormalizedWord?: string;
-};
-
 const TOKEN_WORD_FONT_SIZE = 18;
 const TOKEN_WORD_LINE_HEIGHT = 24;
 const TOKEN_WORD_HORIZONTAL_PADDING = 3;
+const CONTIGUOUS_RANGE_TOLERANCE_MS = 20;
+const ACTIVE_SEGMENT_SCROLL_OFFSET = 96;
 
 const DEFAULT_READING_MODES: ReadingModeSettings[] = [
   { id: 'introduction', enabled: true, displayName: 'Introduction', order: 0 },
@@ -116,8 +117,13 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
   const [isAudioCaching, setIsAudioCaching] = useState(false);
   const [activeModeId, setActiveModeId] = useState<ReadingModeId | null>(null);
+  const [tokenWidths, setTokenWidths] = useState<Record<string, number>>({});
   const startedItemIdsRef = useRef<Set<string>>(new Set());
   const modePlaybackRunIdRef = useRef(0);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const wordFlowOffsetYRef = useRef(0);
+  const segmentOffsetsRef = useRef<Record<string, number>>({});
+  const lastScrolledSegmentRef = useRef<string | null>(null);
   const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
   const handleGoToDashboard = useCallback(() => {
     router.replace('/(tabs)/lessons');
@@ -412,6 +418,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return getTokenSegmentIds(wordTokens, currentItem.text, currentItem.segments);
   }, [currentItem, wordTokens]);
 
+  useEffect(() => {
+    setTokenWidths({});
+  }, [currentItem?.id]);
+
   const segmentStartById = useMemo(() => {
     const result: Record<string, number> = {};
     for (const segment of currentItem?.segments ?? []) {
@@ -421,6 +431,79 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   }, [currentItem]);
 
   const isPlaying = playbackStatus.playing;
+
+  const getSegmentIdAtMs = useCallback(
+    (positionMs: number) => {
+      if (!currentItem) {
+        return null;
+      }
+
+      const matchingSegment = currentItem.segments.find(
+        (segment) => positionMs >= segment.startMs && positionMs < segment.endMs,
+      );
+      return matchingSegment?.id ?? null;
+    },
+    [currentItem],
+  );
+
+  const scrollToSegment = useCallback(
+    (segmentId: string | null, animated = true) => {
+      if (!segmentId) {
+        return;
+      }
+
+      const segmentOffset = segmentOffsetsRef.current[segmentId];
+      if (segmentOffset === undefined) {
+        return;
+      }
+
+      if (lastScrolledSegmentRef.current === segmentId) {
+        return;
+      }
+
+      lastScrolledSegmentRef.current = segmentId;
+      scrollViewRef.current?.scrollTo({
+        animated,
+        y: Math.max(0, wordFlowOffsetYRef.current + segmentOffset - ACTIVE_SEGMENT_SCROLL_OFFSET),
+      });
+    },
+    [],
+  );
+
+  const handleWordFlowLayout = useCallback((event: LayoutChangeEvent) => {
+    wordFlowOffsetYRef.current = event.nativeEvent.layout.y;
+  }, []);
+
+  const handleTokenPositionLayout = useCallback(
+    (segmentId: string | null, event: LayoutChangeEvent) => {
+      if (!segmentId) {
+        return;
+      }
+
+      const nextY = Math.floor(event.nativeEvent.layout.y);
+      const currentY = segmentOffsetsRef.current[segmentId];
+      segmentOffsetsRef.current[segmentId] = currentY === undefined ? nextY : Math.min(currentY, nextY);
+
+      if (segmentId === activeSegmentId && isPlaying) {
+        scrollToSegment(segmentId);
+      }
+    },
+    [activeSegmentId, isPlaying, scrollToSegment],
+  );
+
+  useEffect(() => {
+    segmentOffsetsRef.current = {};
+    lastScrolledSegmentRef.current = null;
+  }, [currentItem?.id]);
+
+  useEffect(() => {
+    if (!isPlaying) {
+      lastScrolledSegmentRef.current = null;
+      return;
+    }
+
+    scrollToSegment(activeSegmentId);
+  }, [activeSegmentId, isPlaying, scrollToSegment]);
 
   useEffect(() => {
     if (playbackStatus.didJustFinish) {
@@ -435,6 +518,35 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         .filter((mode) => mode.enabled)
         .sort((left, right) => left.order - right.order),
     [appSettings?.readingModes],
+  );
+
+  const translationFitSettings = useMemo(
+    () => ({
+      maxFontSize: appSettings?.translationFontMaxSize ?? appSettings?.translationFontSize ?? 15,
+      maxLetterSpacing: appSettings?.translationLetterSpacingMax ?? 0.8,
+      minFontSize: appSettings?.translationFontMinSize ?? 8,
+      minLetterSpacing: appSettings?.translationLetterSpacingMin ?? -0.2,
+    }),
+    [
+      appSettings?.translationFontMaxSize,
+      appSettings?.translationFontMinSize,
+      appSettings?.translationFontSize,
+      appSettings?.translationLetterSpacingMax,
+      appSettings?.translationLetterSpacingMin,
+    ],
+  );
+
+  const translationFontFamily =
+    appSettings?.translationFontFamily && appSettings.translationFontFamily !== 'System'
+      ? appSettings.translationFontFamily
+      : undefined;
+
+  const handleTokenWordLayout = useCallback(
+    (tokenKey: string, event: LayoutChangeEvent) => {
+      const nextWidth = Math.ceil(event.nativeEvent.layout.width);
+      setTokenWidths((prev) => (prev[tokenKey] === nextWidth ? prev : { ...prev, [tokenKey]: nextWidth }));
+    },
+    [],
   );
 
   const unknownNormalizedWords = useMemo(() => {
@@ -469,23 +581,42 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
   const runRangeScript = useCallback(
     async (ranges: PlaybackRange[], runId: number) => {
+      let previousEndMs: number | null = null;
       for (const range of ranges) {
         if (modePlaybackRunIdRef.current !== runId) return;
-        await player.seekTo(range.startMs / 1000);
+        scrollToSegment(getSegmentIdAtMs(range.startMs));
+        const canContinueFromPrevious =
+          previousEndMs !== null &&
+          Math.abs(previousEndMs - range.startMs) <= CONTIGUOUS_RANGE_TOLERANCE_MS;
+        if (!canContinueFromPrevious) {
+          player.pause();
+          await player.seekTo(range.startMs / 1000, 0, 0);
+        }
         if (modePlaybackRunIdRef.current !== runId) return;
-        if (range.pulseNormalizedWord) {
-          triggerTranslationHeartbeat(range.pulseNormalizedWord, range.endMs - range.startMs);
+        const pulseTimers: ReturnType<typeof setTimeout>[] = [];
+        if (range.pulseTargets?.length) {
+          for (const target of range.pulseTargets) {
+            const delayMs = Math.max(0, target.startMs - range.startMs);
+            const pulseDurationMs = Math.max(1, target.endMs - target.startMs);
+            const timer = setTimeout(() => {
+              if (modePlaybackRunIdRef.current !== runId) return;
+              triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
+            }, delayMs);
+            pulseTimers.push(timer);
+          }
         }
         player.play();
         await wait(range.endMs - range.startMs);
+        pulseTimers.forEach(clearTimeout);
         if (modePlaybackRunIdRef.current !== runId) return;
+        previousEndMs = range.endMs;
       }
       player.pause();
       if (modePlaybackRunIdRef.current === runId) {
         setActiveModeId(null);
       }
     },
-    [player, triggerTranslationHeartbeat],
+    [getSegmentIdAtMs, player, scrollToSegment, triggerTranslationHeartbeat],
   );
 
   const handleToggleReadingMode = useCallback(
@@ -509,6 +640,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       setActiveModeId(mode.id);
 
       if (mode.id === 'introduction') {
+        scrollToSegment(getSegmentIdAtMs(0), false);
         void player.seekTo(0).then(() => {
           if (modePlaybackRunIdRef.current !== runId) return;
           player.play();
@@ -531,15 +663,18 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         return;
       }
 
+      scrollToSegment(getSegmentIdAtMs(ranges[0].startMs), false);
       void runRangeScript(ranges, runId);
     },
     [
       activeModeId,
       currentItem,
+      getSegmentIdAtMs,
       getModeDisabledReason,
       playbackStatus.duration,
       player,
       runRangeScript,
+      scrollToSegment,
       unknownNormalizedWords,
     ],
   );
@@ -548,9 +683,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     (startMs: number | null) => {
       if (!isPlaying || startMs === null) return;
       const startSeconds = startMs / 1000;
+      scrollToSegment(getSegmentIdAtMs(startMs), false);
       void player.seekTo(startSeconds);
     },
-    [isPlaying, player],
+    [getSegmentIdAtMs, isPlaying, player, scrollToSegment],
   );
 
   const completeCurrentItem = useCallback(() => {
@@ -839,7 +975,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           })}
         </View>
 
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={handleGoToDashboard} style={styles.dashboardLink}>
@@ -875,7 +1011,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             </View>
           </View>
 
-          <View style={styles.wordFlow}>
+          <View style={styles.wordFlow} onLayout={handleWordFlowLayout}>
             {wordTokens.map((tok, idx) => {
               const segmentId = tokenSegmentIds[idx];
               const isActiveSegment = segmentId !== null && segmentId === activeSegmentId;
@@ -904,6 +1040,13 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                 translationsForToken,
                 revealTranslation,
               );
+              const measuredTokenWidth = tokenWidths[tok.key] ?? 0;
+              const fittedTranslation = fitTranslationLabel({
+                ...translationFitSettings,
+                availableWidth: measuredTokenWidth,
+                text: tokenTranslation.text,
+              });
+              const translationLineHeight = Math.ceil(fittedTranslation.fontSize + 3);
               const pulseValue = getTokenPulseValue(normalizedWord);
               const pulseScale = pulseValue.interpolate({
                 inputRange: [0, 0.5, 1],
@@ -916,6 +1059,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               return (
                 <Pressable
                   key={tok.key}
+                  onLayout={(event) => handleTokenPositionLayout(segmentId, event)}
                   onPress={() => {
                     if (isPlaying) {
                       triggerTokenFeedback(normalizedWord);
@@ -939,9 +1083,19 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                   style={styles.tokenWrapper}>
                   <View style={styles.tokenPulse}>
                     <Animated.Text
+                      ellipsizeMode="clip"
                       numberOfLines={1}
                       style={[
                         styles.tokenTranslation,
+                        {
+                          fontFamily: translationFontFamily,
+                          fontSize: fittedTranslation.fontSize,
+                          height: translationLineHeight,
+                          letterSpacing: fittedTranslation.letterSpacing,
+                          lineHeight: translationLineHeight,
+                          minWidth: measuredTokenWidth || undefined,
+                          width: fittedTranslation.containerWidth,
+                        },
                         {
                           opacity: pulseOpacity,
                           transform: [{ scale: pulseScale }],
@@ -951,6 +1105,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
                       {tokenTranslation.text}
                     </Animated.Text>
                     <Text
+                      onLayout={(event) => handleTokenWordLayout(tok.key, event)}
                       style={[
                         styles.tokenWord,
                         isActiveSegment && styles.tokenWordActive,
@@ -1038,70 +1193,6 @@ function wait(ms: number) {
   return new Promise((resolve) => {
     setTimeout(resolve, Math.max(ms, 120));
   });
-}
-
-function buildReadingModeScript({
-  currentItem,
-  durationMs,
-  mode,
-  unknownNormalizedWords,
-}: {
-  currentItem: LessonItem;
-  durationMs: number;
-  mode: ReadingModeSettings;
-  unknownNormalizedWords: Set<string>;
-}): PlaybackRange[] {
-  const timelineEndMs =
-    durationMs > 0
-      ? durationMs
-      : Math.max(0, ...currentItem.segments.map((segment) => segment.endMs));
-  const ranges: PlaybackRange[] = [];
-  const unknownWordRanges = [...(currentItem.wordTimings ?? [])]
-    .filter((mark) => unknownNormalizedWords.has(mark.normalizedText))
-    .sort((left, right) => left.startMs - right.startMs);
-  const wordRepeatCount = Math.max(1, mode.unknownWordRepetitions ?? 1);
-
-  let cursorMs = 0;
-  for (const mark of unknownWordRanges) {
-    if (mark.startMs > cursorMs) {
-      ranges.push({ startMs: cursorMs, endMs: mark.startMs });
-    }
-    for (let index = 0; index < wordRepeatCount; index += 1) {
-      ranges.push({
-        startMs: mark.startMs,
-        endMs: mark.endMs,
-        pulseNormalizedWord: mark.normalizedText,
-      });
-    }
-    cursorMs = Math.max(cursorMs, mark.endMs);
-  }
-
-  if (timelineEndMs > cursorMs) {
-    ranges.push({ startMs: cursorMs, endMs: timelineEndMs });
-  }
-
-  if (mode.id !== 'deep_learning') {
-    return ranges.filter((range) => range.endMs > range.startMs);
-  }
-
-  const unknownWordIds = new Set(unknownWordRanges.map((mark) => mark.id));
-  const threshold = Math.max(1, mode.repeatSentenceWhenUnknownCountAtLeast ?? 2);
-  const sentenceRepeatCount = Math.max(1, mode.sentenceRepetitions ?? 2);
-  const sentenceRepeats = [...(currentItem.sentenceTimings ?? [])]
-    .filter(
-      (sentence) =>
-        sentence.wordMarkIds.filter((wordMarkId) => unknownWordIds.has(wordMarkId)).length >=
-        threshold,
-    )
-    .sort((left, right) => left.startMs - right.startMs);
-
-  for (const sentence of sentenceRepeats) {
-    for (let index = 0; index < sentenceRepeatCount; index += 1) {
-      ranges.push({ startMs: sentence.startMs, endMs: sentence.endMs });
-    }
-  }
-
-  return ranges.filter((range) => range.endMs > range.startMs);
 }
 
 const styles = StyleSheet.create({
@@ -1243,6 +1334,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     height: 13,
     lineHeight: 13,
+    marginBottom: 3,
     textAlign: 'center',
   },
   tokenTranslationHidden: {
