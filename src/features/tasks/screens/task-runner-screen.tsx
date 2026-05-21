@@ -16,10 +16,7 @@ import {
   setActiveLesson,
 } from '@/src/features/lessons/progression-storage';
 import { flushProgressQueue, queueProgressEvents } from '@/src/features/progress/progress-sync';
-import {
-  ACTIVE_SEGMENT_SCROLL_OFFSET,
-  DEFAULT_READING_MODES,
-} from '@/src/features/tasks/constants/task-runner';
+import { DEFAULT_READING_MODES } from '@/src/features/tasks/constants/task-runner';
 import {
   LessonProgressOverview,
   LessonRunnerHeader,
@@ -33,6 +30,7 @@ import { useRunnerVocabulary } from '@/src/features/tasks/hooks/use-runner-vocab
 import { useTaskRunnerData } from '@/src/features/tasks/hooks/use-task-runner-data';
 import {
   calculateCompletion,
+  calculateCenteredSegmentScrollOffset,
   createIdempotencyKey,
   formatSeconds,
 } from '@/src/features/tasks/services/task-runner-helpers';
@@ -48,6 +46,11 @@ interface TaskRunnerScreenProps {
   lessonId: string;
 }
 
+type SegmentLayoutBounds = {
+  bottom: number;
+  top: number;
+};
+
 export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const router = useRouter();
   const { token, user } = useSession();
@@ -57,9 +60,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const [tokenWidths, setTokenWidths] = useState<Record<string, number>>({});
   const startedItemIdsRef = useRef<Set<string>>(new Set());
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const scrollViewportHeightRef = useRef(0);
   const wordFlowOffsetYRef = useRef(0);
-  const segmentOffsetsRef = useRef<Record<string, number>>({});
-  const lastScrolledSegmentRef = useRef<string | null>(null);
+  const segmentLayoutsRef = useRef<Record<string, SegmentLayoutBounds>>({});
   const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
 
   const { appSettings, entryCacheByText, error, isLoading, lesson } = useTaskRunnerData({
@@ -279,23 +282,27 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         return;
       }
 
-      const segmentOffset = segmentOffsetsRef.current[segmentId];
-      if (segmentOffset === undefined) {
+      const segmentLayout = segmentLayoutsRef.current[segmentId];
+      if (!segmentLayout) {
         return;
       }
 
-      if (lastScrolledSegmentRef.current === segmentId) {
-        return;
-      }
-
-      lastScrolledSegmentRef.current = segmentId;
       scrollViewRef.current?.scrollTo({
         animated,
-        y: Math.max(0, wordFlowOffsetYRef.current + segmentOffset - ACTIVE_SEGMENT_SCROLL_OFFSET),
+        y: calculateCenteredSegmentScrollOffset({
+          segmentBottom: segmentLayout.bottom,
+          segmentTop: segmentLayout.top,
+          viewportHeight: scrollViewportHeightRef.current,
+          wordFlowOffsetY: wordFlowOffsetYRef.current,
+        }),
       });
     },
     [],
   );
+
+  const handleScrollViewLayout = useCallback((event: LayoutChangeEvent) => {
+    scrollViewportHeightRef.current = event.nativeEvent.layout.height;
+  }, []);
 
   const handleWordFlowLayout = useCallback((event: LayoutChangeEvent) => {
     wordFlowOffsetYRef.current = event.nativeEvent.layout.y;
@@ -308,9 +315,17 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       }
 
       const nextY = Math.floor(event.nativeEvent.layout.y);
-      const currentY = segmentOffsetsRef.current[segmentId];
-      segmentOffsetsRef.current[segmentId] =
-        currentY === undefined ? nextY : Math.min(currentY, nextY);
+      const nextBottom = Math.ceil(event.nativeEvent.layout.y + event.nativeEvent.layout.height);
+      const currentBounds = segmentLayoutsRef.current[segmentId];
+      segmentLayoutsRef.current[segmentId] = currentBounds
+        ? {
+            bottom: Math.max(currentBounds.bottom, nextBottom),
+            top: Math.min(currentBounds.top, nextY),
+          }
+        : {
+            bottom: nextBottom,
+            top: nextY,
+          };
 
       if (segmentId === activeSegmentId && isPlaying) {
         scrollToSegment(segmentId);
@@ -320,13 +335,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   );
 
   useEffect(() => {
-    segmentOffsetsRef.current = {};
-    lastScrolledSegmentRef.current = null;
+    segmentLayoutsRef.current = {};
   }, [currentItem?.id]);
 
   useEffect(() => {
     if (!isPlaying) {
-      lastScrolledSegmentRef.current = null;
       return;
     }
 
@@ -541,7 +554,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           playing={playbackStatus.playing}
         />
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          onLayout={handleScrollViewLayout}>
           <LessonRunnerHeader
             lessonTitle={lesson.title}
             onBack={handleGoToDashboard}

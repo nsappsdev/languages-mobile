@@ -1,0 +1,310 @@
+import { StyleSheet } from 'react-native';
+import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+
+export const styles = StyleSheet.create({
+  center: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+    justifyContent: 'center',
+  },
+  header: {
+    marginBottom: 12,
+  },
+  title: {
+    color: text.primary,
+    fontSize: fontSize['4xl'],
+    fontWeight: fontWeight.bold,
+    marginBottom: 4,
+  },
+  meta: {
+    color: text.secondary,
+    fontSize: fontSize.md,
+  },
+  error: {
+    color: text.error,
+    fontSize: fontSize.md,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: brand[700],
+    borderRadius: radii.md,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  retryText: {
+    color: neutral[0],
+    fontWeight: fontWeight.semibold,
+  },
+  syncMeta: {
+    color: text.brand,
+    fontSize: fontSize.sm,
+    marginTop: 6,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  searchInput: {
+    backgroundColor: surface.input,
+    borderColor: border.default,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    color: text.primary,
+    fontSize: 15,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summaryCard: {
+    alignItems: 'center',
+    backgroundColor: surface.card,
+    borderColor: border.subtle,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flex: 1,
+    paddingVertical: 10,
+  },
+  summaryValue: {
+    color: text.brand,
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+  },
+  summaryLabel: {
+    color: text.muted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  listContent: {
+    gap: 12,
+    paddingBottom: 24,
+  },
+  sectionCard: {
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['2xl'],
+    borderWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  sectionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  sectionHeadingCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  sectionHeadingCopyPressed: {
+    opacity: 0.7,
+  },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sectionChevron: {
+    color: text.muted,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+  },
+  sectionTitle: {
+    color: text.primary,
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+  },
+  sectionMeta: {
+    color: text.muted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  sectionDescription: {
+    color: text.secondary,
+    fontSize: fontSize.base,
+    lineHeight: 18,
+  },
+  checkButton: {
+    backgroundColor: brand[700],
+    borderRadius: radii.full,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  checkButtonPressed: {
+    opacity: 0.85,
+  },
+  checkButtonText: {
+    color: neutral[0],
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
+    textTransform: 'uppercase',
+  },
+  sectionEntries: {
+    gap: 8,
+  },
+  card: {
+    backgroundColor: surface.page,
+    borderColor: border.subtle,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    gap: 6,
+    padding: 12,
+  },
+  cardRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  cardLeft: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  cardDivider: {
+    alignSelf: 'stretch',
+    backgroundColor: '#dbeafe',
+    marginHorizontal: 4,
+    width: 1,
+  },
+  cardRight: {
+    flex: 1,
+    paddingLeft: 10,
+  },
+  word: {
+    color: text.primary,
+    fontSize: 17,
+    fontWeight: fontWeight.bold,
+  },
+  translationPrimary: {
+    color: text.brand,
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+  },
+  moreMeta: {
+    color: text.muted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  emptyCard: {
+    alignItems: 'center',
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    padding: 16,
+  },
+  emptyTitle: {
+    color: text.primary,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    marginBottom: 4,
+  },
+  emptyText: {
+    color: text.secondary,
+    fontSize: fontSize.base,
+    textAlign: 'center',
+  },
+  reviewHeader: {
+    gap: 6,
+    marginBottom: 14,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+  },
+  backButtonText: {
+    color: text.brand,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.bold,
+  },
+  reviewLessonTitle: {
+    color: text.primary,
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.bold,
+  },
+  reviewProgress: {
+    color: text.muted,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+  },
+  reviewHintRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+  },
+  reviewHintLeft: {
+    color: text.warning,
+    flex: 1,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+  },
+  reviewHintRight: {
+    color: text.brand,
+    flex: 1,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.bold,
+    textAlign: 'right',
+  },
+  reviewDeck: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  reviewCard: {
+    alignItems: 'center',
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['3xl'],
+    borderWidth: 1,
+    gap: 12,
+    maxWidth: 420,
+    paddingHorizontal: 24,
+    paddingVertical: 28,
+    width: '100%',
+  },
+  reviewEnglish: {
+    color: text.primary,
+    fontSize: fontSize['5xl'],
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  reviewMetaText: {
+    color: text.secondary,
+    fontSize: fontSize.base,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  reviewButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  reviewActionButton: {
+    borderRadius: radii.xl,
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reviewActionButtonLeft: {
+    backgroundColor: '#fff7ed',
+    borderColor: border.warning,
+    borderWidth: 1,
+  },
+  reviewActionButtonRight: {
+    backgroundColor: surface.active,
+    borderColor: border.active,
+    borderWidth: 1,
+  },
+  reviewActionTextLeft: {
+    color: text.warning,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  reviewActionTextRight: {
+    color: text.brand,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+});

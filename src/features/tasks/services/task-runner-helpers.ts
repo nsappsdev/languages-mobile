@@ -49,3 +49,20 @@ export function wait(ms: number) {
     setTimeout(resolve, Math.max(ms, 120));
   });
 }
+
+export function calculateCenteredSegmentScrollOffset({
+  segmentBottom,
+  segmentTop,
+  viewportHeight,
+  wordFlowOffsetY,
+}: {
+  segmentBottom: number;
+  segmentTop: number;
+  viewportHeight: number;
+  wordFlowOffsetY: number;
+}) {
+  const segmentCenter = wordFlowOffsetY + (segmentTop + segmentBottom) / 2;
+  const centeredOffset =
+    viewportHeight > 0 ? segmentCenter - viewportHeight / 2 : wordFlowOffsetY + segmentTop;
+  return Math.max(0, centeredOffset);
+}

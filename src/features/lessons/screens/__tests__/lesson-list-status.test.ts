@@ -1,7 +1,9 @@
 import {
+  buildLessonDashboardSummary,
+  buildCompletedLessonSet,
   getLessonCardStatus,
   resolveCurrentLessonId,
-} from '@/src/features/lessons/screens/lesson-list-screen';
+} from '@/src/features/lessons/services/lesson-dashboard-helpers';
 import type { Lesson } from '@/src/types/domain';
 
 function createLesson(input: { id: string; title: string }): Lesson {
@@ -75,5 +77,26 @@ describe('lesson list status helpers', () => {
     expect(current).toBe('CURRENT');
     expect(openAhead).toBe('OPEN');
     expect(open).toBe('OPEN');
+  });
+
+  it('builds dashboard summary using only completed ids that still exist', () => {
+    const summary = buildLessonDashboardSummary(lessons, {
+      activeLessonId: 'lesson-2',
+      completedLessonIds: ['lesson-1', 'missing-lesson'],
+      updatedAt: '2026-05-21T00:00:00.000Z',
+    });
+
+    expect([...summary.completedSet]).toEqual(['lesson-1']);
+    expect(summary.completedLessons).toBe(1);
+    expect(summary.totalLessons).toBe(3);
+    expect(summary.progressPercent).toBe(33);
+    expect(summary.currentLessonId).toBe('lesson-2');
+    expect(summary.currentLesson?.id).toBe('lesson-2');
+  });
+
+  it('filters stale completed lesson ids before counting progress', () => {
+    expect([...buildCompletedLessonSet(lessons, ['lesson-1', 'missing-lesson'])]).toEqual([
+      'lesson-1',
+    ]);
   });
 });
