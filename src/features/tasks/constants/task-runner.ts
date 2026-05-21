@@ -4,6 +4,7 @@ export const TOKEN_WORD_FONT_SIZE = 18;
 export const TOKEN_WORD_LINE_HEIGHT = 24;
 export const TOKEN_WORD_HORIZONTAL_PADDING = 3;
 export const CONTIGUOUS_RANGE_TOLERANCE_MS = 20;
+export const ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS = 650;
 
 export const DEFAULT_READING_MODES: ReadingModeSettings[] = [
   { id: 'introduction', enabled: true, displayName: 'Introduction', order: 0 },

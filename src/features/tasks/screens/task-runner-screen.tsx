@@ -16,7 +16,10 @@ import {
   setActiveLesson,
 } from '@/src/features/lessons/progression-storage';
 import { flushProgressQueue, queueProgressEvents } from '@/src/features/progress/progress-sync';
-import { DEFAULT_READING_MODES } from '@/src/features/tasks/constants/task-runner';
+import {
+  ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS,
+  DEFAULT_READING_MODES,
+} from '@/src/features/tasks/constants/task-runner';
 import {
   LessonProgressOverview,
   LessonRunnerHeader,
@@ -33,6 +36,7 @@ import {
   calculateCenteredSegmentScrollOffset,
   createIdempotencyKey,
   formatSeconds,
+  getAnticipatedSegmentId,
 } from '@/src/features/tasks/services/task-runner-helpers';
 import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
 import { getTokenSegmentIds } from '@/src/features/tasks/screens/task-runner-segments';
@@ -238,6 +242,19 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return activeSegment?.id ?? null;
   }, [currentItem, playbackStatus.currentTime]);
 
+  const scrollTargetSegmentId = useMemo(() => {
+    if (!currentItem || !isPlaying) {
+      return activeSegmentId;
+    }
+
+    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
+    return getAnticipatedSegmentId({
+      lookaheadMs: ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS,
+      positionMs: currentPositionMs,
+      segments: currentItem.segments,
+    });
+  }, [activeSegmentId, currentItem, isPlaying, playbackStatus.currentTime]);
+
   const wordTokens = useMemo(
     () => (currentItem ? tokenizeLessonText(currentItem.text) : []),
     [currentItem],
@@ -327,11 +344,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             top: nextY,
           };
 
-      if (segmentId === activeSegmentId && isPlaying) {
+      if (segmentId === scrollTargetSegmentId && isPlaying) {
         scrollToSegment(segmentId);
       }
     },
-    [activeSegmentId, isPlaying, scrollToSegment],
+    [isPlaying, scrollTargetSegmentId, scrollToSegment],
   );
 
   useEffect(() => {
@@ -343,8 +360,8 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       return;
     }
 
-    scrollToSegment(activeSegmentId);
-  }, [activeSegmentId, isPlaying, scrollToSegment]);
+    scrollToSegment(scrollTargetSegmentId);
+  }, [isPlaying, scrollTargetSegmentId, scrollToSegment]);
 
   const readingModes = useMemo(
     () =>

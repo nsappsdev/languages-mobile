@@ -1,5 +1,5 @@
 import { normalizeVocabularySelection } from '@/src/features/vocabulary/services/add-word-to-vocabulary';
-import type { LearnerVocabularyItem, VocabularyEntry } from '@/src/types/domain';
+import type { LearnerVocabularyItem, LessonItemSegment, VocabularyEntry } from '@/src/types/domain';
 
 export function createVocabularyLookup(items: LearnerVocabularyItem[]) {
   return items.reduce<Record<string, LearnerVocabularyItem>>((acc, item) => {
@@ -65,4 +65,37 @@ export function calculateCenteredSegmentScrollOffset({
   const centeredOffset =
     viewportHeight > 0 ? segmentCenter - viewportHeight / 2 : wordFlowOffsetY + segmentTop;
   return Math.max(0, centeredOffset);
+}
+
+export function getAnticipatedSegmentId({
+  lookaheadMs,
+  positionMs,
+  segments,
+}: {
+  lookaheadMs: number;
+  positionMs: number;
+  segments: LessonItemSegment[];
+}) {
+  if (!segments.length) {
+    return null;
+  }
+
+  const anticipatedPositionMs = positionMs + lookaheadMs;
+  const anticipatedSegment = segments.find(
+    (segment) =>
+      anticipatedPositionMs >= segment.startMs && anticipatedPositionMs < segment.endMs,
+  );
+  if (anticipatedSegment) {
+    return anticipatedSegment.id;
+  }
+
+  const currentSegment = segments.find(
+    (segment) => positionMs >= segment.startMs && positionMs < segment.endMs,
+  );
+  if (currentSegment) {
+    return currentSegment.id;
+  }
+
+  const nextSegment = segments.find((segment) => segment.startMs > positionMs);
+  return nextSegment?.id ?? null;
 }

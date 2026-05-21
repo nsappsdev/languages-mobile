@@ -4,6 +4,7 @@ import {
   calculateCenteredSegmentScrollOffset,
   createVocabularyLookup,
   formatSeconds,
+  getAnticipatedSegmentId,
 } from '../task-runner-helpers';
 import type { LearnerVocabularyItem, VocabularyEntry } from '@/src/types/domain';
 
@@ -65,5 +66,31 @@ describe('task runner helpers', () => {
         wordFlowOffsetY: 80,
       }),
     ).toBe(0);
+  });
+
+  it('selects the upcoming segment before it starts when lookahead reaches it', () => {
+    expect(
+      getAnticipatedSegmentId({
+        lookaheadMs: 650,
+        positionMs: 1400,
+        segments: [
+          { id: 'one', text: 'First sentence', startMs: 0, endMs: 1800 },
+          { id: 'two', text: 'Second sentence', startMs: 2000, endMs: 3200 },
+        ],
+      }),
+    ).toBe('two');
+  });
+
+  it('keeps current segment when lookahead does not reach a later segment', () => {
+    expect(
+      getAnticipatedSegmentId({
+        lookaheadMs: 300,
+        positionMs: 900,
+        segments: [
+          { id: 'one', text: 'First sentence', startMs: 0, endMs: 1800 },
+          { id: 'two', text: 'Second sentence', startMs: 2000, endMs: 3200 },
+        ],
+      }),
+    ).toBe('one');
   });
 });
