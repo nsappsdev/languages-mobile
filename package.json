@@ -13,8 +13,8 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage --runInBand",
     "build:android:production": "npx eas-cli build --platform android --profile production",
-    "build:android:store": "npx eas-cli build --platform android --profile production-store",
-    "submit:android:internal": "npx eas-cli submit --platform android --profile production-store",
+    "build:android:store": "npx eas-cli build --platform android --profile production",
+    "submit:android:internal": "npx eas-cli submit --platform android --profile production",
     "build:ios:production": "npx eas-cli build --platform ios --profile production",
     "build:all:production": "npx eas-cli build --platform all --profile production"
   },

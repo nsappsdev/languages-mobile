@@ -549,7 +549,7 @@ export function VocabularyScreen() {
             <Text style={styles.emptyText}>
               {searchQuery.trim()
                 ? 'Try another English or Armenian search term.'
-                : 'Add vocabulary from lesson text selection to build lesson sections here.'}
+                : 'Tap translated words in lessons to build lesson sections here.'}
             </Text>
           </View>
         }

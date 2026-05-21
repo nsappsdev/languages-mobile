@@ -1,6 +1,6 @@
-# Language Mobile App (Phase 1)
+# Language Mobile App
 
-Expo Router mobile client for the task-based language learning MVP.
+Expo Router mobile client for the language learning app.
 
 ## Setup
 
@@ -22,14 +22,13 @@ Expo Router mobile client for the task-based language learning MVP.
    npm run start
    ```
 
-## Current Implementation Slice
+## Current Implementation
 
 - Auth flow (`/(auth)/login`) integrated with backend login/profile/logout.
 - Main tabs:
   - `/(tabs)/lessons`
   - `/(tabs)/vocabulary`
   - `/(tabs)/profile`
-- Lesson detail route: `/lesson/[lessonId]`
 - Task runner route: `/runner/[lessonId]`
 - Lesson results route: `/results/[lessonId]`
 
@@ -38,17 +37,16 @@ Expo Router mobile client for the task-based language learning MVP.
 - Session persistence is implemented (secure store on native when available, safe browser storage fallback on web).
 - Progress sync events are implemented with queued batching and retry.
 - Dashboard now enforces level-order lesson progression (future lessons lock until current is completed).
-- Select any text in task prompts and tap Add to Vocabulary to save it.
-- Vocabulary sync is user-scoped: add responses merge locally immediately, then screen refreshes from backend source of truth.
-- Full `LISTENING_TEXT` audio playback integration is still planned in the next implementation slice.
+- Lesson runner supports cached audio playback, phrase/word timing, reading modes, and tap-to-mark-unknown vocabulary reveal.
+- Vocabulary sync is user-scoped: local status changes are cached immediately, then flushed to the backend.
 
 ## Production Builds (EAS)
 
-- Android production APK:
+- Android production build:
   ```bash
   npm run build:android:production
   ```
-- Android Play Store bundle (`.aab`):
+- Android Play Store bundle alias:
   ```bash
   npm run build:android:store
   ```
@@ -67,7 +65,7 @@ Expo Router mobile client for the task-based language learning MVP.
 
 For the full Android internal testing rollout checklist, see `../docs/deployment.md`.
 
-Current EAS production build base URL is pinned in `eas.json` to `http://138.68.76.47/api` for client testing. Replace it when the backend moves to the final HTTPS domain.
+Current EAS production builds use `EXPO_PUBLIC_API_BASE_URL=https://lezoo.app/api` from `eas.json`.
 
 ## Tests
 
