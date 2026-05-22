@@ -50,21 +50,16 @@ export function wait(ms: number) {
   });
 }
 
-export function calculateCenteredSegmentScrollOffset({
-  segmentBottom,
+export function calculateTopSegmentScrollOffset({
+  topPadding,
   segmentTop,
-  viewportHeight,
   wordFlowOffsetY,
 }: {
-  segmentBottom: number;
+  topPadding: number;
   segmentTop: number;
-  viewportHeight: number;
   wordFlowOffsetY: number;
 }) {
-  const segmentCenter = wordFlowOffsetY + (segmentTop + segmentBottom) / 2;
-  const centeredOffset =
-    viewportHeight > 0 ? segmentCenter - viewportHeight / 2 : wordFlowOffsetY + segmentTop;
-  return Math.max(0, centeredOffset);
+  return Math.max(0, wordFlowOffsetY + segmentTop - topPadding);
 }
 
 export function getAnticipatedSegmentId({

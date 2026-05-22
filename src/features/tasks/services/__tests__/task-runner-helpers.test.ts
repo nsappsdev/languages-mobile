@@ -1,7 +1,7 @@
 import {
   buildEntryCacheByText,
   calculateCompletion,
-  calculateCenteredSegmentScrollOffset,
+  calculateTopSegmentScrollOffset,
   createVocabularyLookup,
   formatSeconds,
   getAnticipatedSegmentId,
@@ -46,24 +46,22 @@ describe('task runner helpers', () => {
     expect(formatSeconds(65.3)).toBe('1:05');
   });
 
-  it('centers the active segment inside the visible scroll area', () => {
+  it('positions the active segment near the top of the visible text area', () => {
     expect(
-      calculateCenteredSegmentScrollOffset({
-        segmentBottom: 360,
+      calculateTopSegmentScrollOffset({
         segmentTop: 300,
-        viewportHeight: 400,
+        topPadding: 24,
         wordFlowOffsetY: 120,
       }),
-    ).toBe(250);
+    ).toBe(396);
   });
 
-  it('does not scroll past the top when centering early segments', () => {
+  it('does not scroll past the top when top-aligning early segments', () => {
     expect(
-      calculateCenteredSegmentScrollOffset({
-        segmentBottom: 60,
+      calculateTopSegmentScrollOffset({
         segmentTop: 20,
-        viewportHeight: 400,
-        wordFlowOffsetY: 80,
+        topPadding: 24,
+        wordFlowOffsetY: 0,
       }),
     ).toBe(0);
   });

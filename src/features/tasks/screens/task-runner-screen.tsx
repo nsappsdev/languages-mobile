@@ -33,7 +33,7 @@ import { useRunnerVocabulary } from '@/src/features/tasks/hooks/use-runner-vocab
 import { useTaskRunnerData } from '@/src/features/tasks/hooks/use-task-runner-data';
 import {
   calculateCompletion,
-  calculateCenteredSegmentScrollOffset,
+  calculateTopSegmentScrollOffset,
   createIdempotencyKey,
   formatSeconds,
   getAnticipatedSegmentId,
@@ -55,6 +55,8 @@ type SegmentLayoutBounds = {
   top: number;
 };
 
+const ACTIVE_SEGMENT_SCROLL_TOP_PADDING = 24;
+
 export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const router = useRouter();
   const { token, user } = useSession();
@@ -64,7 +66,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const [tokenWidths, setTokenWidths] = useState<Record<string, number>>({});
   const startedItemIdsRef = useRef<Set<string>>(new Set());
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const scrollViewportHeightRef = useRef(0);
   const wordFlowOffsetYRef = useRef(0);
   const segmentLayoutsRef = useRef<Record<string, SegmentLayoutBounds>>({});
   const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
@@ -306,20 +307,15 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
       scrollViewRef.current?.scrollTo({
         animated,
-        y: calculateCenteredSegmentScrollOffset({
-          segmentBottom: segmentLayout.bottom,
+        y: calculateTopSegmentScrollOffset({
           segmentTop: segmentLayout.top,
-          viewportHeight: scrollViewportHeightRef.current,
+          topPadding: ACTIVE_SEGMENT_SCROLL_TOP_PADDING,
           wordFlowOffsetY: wordFlowOffsetYRef.current,
         }),
       });
     },
     [],
   );
-
-  const handleScrollViewLayout = useCallback((event: LayoutChangeEvent) => {
-    scrollViewportHeightRef.current = event.nativeEvent.layout.height;
-  }, []);
 
   const handleWordFlowLayout = useCallback((event: LayoutChangeEvent) => {
     wordFlowOffsetYRef.current = event.nativeEvent.layout.y;
@@ -571,10 +567,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
           playing={playbackStatus.playing}
         />
 
-        <ScrollView
-          ref={scrollViewRef}
-          contentContainerStyle={styles.scrollContent}
-          onLayout={handleScrollViewLayout}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
           <LessonRunnerHeader
             lessonTitle={lesson.title}
             onBack={handleGoToDashboard}
