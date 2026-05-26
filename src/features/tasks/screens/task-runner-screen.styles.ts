@@ -131,18 +131,15 @@ export const styles = StyleSheet.create({
   tokenPulse: {
     alignItems: 'center',
     maxWidth: '100%',
-    position: 'relative',
   },
   tokenTranslation: {
-    alignSelf: 'center',
     color: '#0f766e',
     fontSize: 10,
     fontWeight: fontWeight.bold,
     height: 13,
     lineHeight: 13,
-    position: 'absolute',
+    marginBottom: 3,
     textAlign: 'center',
-    top: 0,
   },
   tokenTranslationHidden: {
     opacity: 0,

@@ -11,6 +11,7 @@ type TranslationFitInput = TranslationFitSettings & {
 };
 
 const APPROX_ARMENIAN_CHAR_WIDTH = 0.9;
+const TRANSLATION_WIDTH_SAFETY_PX = 8;
 
 export function fitTranslationLabel({
   availableWidth,
@@ -53,7 +54,9 @@ export function fitTranslationLabel({
   }
 
   return {
-    containerWidth: Math.ceil(availableWidth),
+    containerWidth: Math.ceil(
+      estimateTextWidth(textLength, minFontSize, minLetterSpacing) + TRANSLATION_WIDTH_SAFETY_PX,
+    ),
     fontSize: minFontSize,
     letterSpacing: minLetterSpacing,
   };

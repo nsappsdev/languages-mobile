@@ -156,7 +156,7 @@ export function TaskWordFlow({
             }}
             disabled={isPlaying && segmentStartMs === null}
             style={styles.tokenWrapper}>
-            <View style={[styles.tokenPulse, { paddingTop: translationLineHeight + 3 }]}>
+            <View style={styles.tokenPulse}>
               <Animated.Text
                 ellipsizeMode="clip"
                 numberOfLines={1}
@@ -168,6 +168,7 @@ export function TaskWordFlow({
                     height: translationLineHeight,
                     letterSpacing: fittedTranslation.letterSpacing,
                     lineHeight: translationLineHeight,
+                    minWidth: measuredTokenWidth || undefined,
                     width: fittedTranslation.containerWidth,
                   },
                   {
