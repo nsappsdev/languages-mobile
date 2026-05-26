@@ -30,7 +30,7 @@ describe('fitTranslationLabel', () => {
     expect(fit.letterSpacing).toBeGreaterThanOrEqual(settings.minLetterSpacing);
   });
 
-  it('falls back to configured minimums when the label cannot fully fit', () => {
+  it('falls back to configured minimums while keeping the full label visible', () => {
     const fit = fitTranslationLabel({
       ...settings,
       availableWidth: 8,

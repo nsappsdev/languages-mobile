@@ -3,6 +3,7 @@ import type {
   GoogleSignInResponse,
   LearnerVocabularyItem,
   LearnerVocabularyStatus,
+  LessonVocabularyReviewItem,
   Lesson,
   LoginResponse,
   AppSettings,
@@ -326,5 +327,36 @@ export const apiClient = {
       token,
       body: JSON.stringify({ items }),
     });
+  },
+
+  getLessonVocabulary(token: string, lessonId: string) {
+    return request<{
+      vocabulary: {
+        lessonId: string;
+        title: string;
+        description?: string | null;
+        status: string;
+        entries: LessonVocabularyReviewItem[];
+      };
+    }>(`/me/lessons/${lessonId}/vocabulary`, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  updateLessonVocabularyStatus(
+    token: string,
+    lessonId: string,
+    entryId: string,
+    status: 'NEW' | 'LEARNING' | 'LEARNED',
+  ) {
+    return request<{ review: LessonVocabularyReviewItem }>(
+      `/me/lessons/${lessonId}/vocabulary/${entryId}`,
+      {
+        method: 'PATCH',
+        token,
+        body: JSON.stringify({ status }),
+      },
+    );
   },
 };

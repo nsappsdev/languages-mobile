@@ -1,6 +1,7 @@
 export type LessonStatus = 'DRAFT' | 'PUBLISHED';
 export type VocabularyKind = 'WORD' | 'PHRASE' | 'SENTENCE';
-export type LearnerVocabularyStatus = 'NEW' | 'REVIEWING' | 'MASTERED';
+export type LearnerVocabularyStatus = 'NEW' | 'REVIEWING' | 'MASTERED' | 'LEARNING' | 'LEARNED';
+export type LearnerLessonVocabularyStatus = 'NEW' | 'LEARNING' | 'LEARNED';
 
 export interface LessonItemSegment {
   id: string;
@@ -48,6 +49,8 @@ export interface Lesson {
   items: LessonItem[];
   dictionary?: VocabularyEntry[];
   dictionaryCoverage?: LessonDictionaryCoverageItem[];
+  vocabulary?: VocabularyEntry[];
+  vocabularyCoverage?: LessonDictionaryCoverageItem[];
 }
 
 export interface User {
@@ -92,8 +95,12 @@ export interface VocabularyTranslation {
 
 export interface VocabularyEntry {
   id: string;
+  lessonId?: string;
+  sourceItemId?: string | null;
   englishText: string;
+  normalizedText?: string;
   kind: VocabularyKind;
+  order?: number;
   notes?: string | null;
   tags: string[];
   translations: VocabularyTranslation[];
@@ -107,6 +114,8 @@ export interface LessonDictionaryCoverageItem {
   hasTranslation: boolean;
   hasArmenianTranslation: boolean;
   translations: VocabularyTranslation[];
+  matched?: boolean;
+  matchCount?: number;
 }
 
 export interface LearnerVocabularyItem {
@@ -116,6 +125,18 @@ export interface LearnerVocabularyItem {
   status: LearnerVocabularyStatus;
   addedAt: string;
   updatedAt: string;
+  entry: VocabularyEntry;
+}
+
+export interface LessonVocabularyReviewItem {
+  id: string;
+  lessonId: string;
+  entryId: string;
+  status: LearnerLessonVocabularyStatus;
+  rightSwipes: number;
+  leftSwipes: number;
+  lastReviewedAt: string | null;
+  firstSeenAt: string | null;
   entry: VocabularyEntry;
 }
 

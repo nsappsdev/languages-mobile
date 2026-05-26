@@ -1,4 +1,4 @@
-import { buildReadingModeScript } from '../reading-mode-script';
+import { buildReadingModeScript, resumePlaybackRanges } from '../reading-mode-script';
 import type { LessonItem, ReadingModeSettings } from '@/src/types/domain';
 
 const baseItem: LessonItem = {
@@ -116,5 +116,45 @@ describe('buildReadingModeScript', () => {
       },
       { startMs: 1500, endMs: 1800 },
     ]);
+  });
+});
+
+describe('resumePlaybackRanges', () => {
+  it('continues from the paused range instead of restarting the script', () => {
+    const ranges = [
+      { startMs: 0, endMs: 1000 },
+      { startMs: 1000, endMs: 1500 },
+      { startMs: 1000, endMs: 1500 },
+      { startMs: 1500, endMs: 2200 },
+    ];
+
+    expect(
+      resumePlaybackRanges({
+        preferredRangeIndex: 2,
+        ranges,
+        resumeMs: 1200,
+      }),
+    ).toEqual({
+      startIndex: 2,
+      ranges: [
+        { startMs: 1200, endMs: 1500 },
+        { startMs: 1500, endMs: 2200 },
+      ],
+    });
+  });
+
+  it('falls back to the current audio position when no paused range index is available', () => {
+    expect(
+      resumePlaybackRanges({
+        ranges: [
+          { startMs: 0, endMs: 1000 },
+          { startMs: 1000, endMs: 2000 },
+        ],
+        resumeMs: 1500,
+      }),
+    ).toEqual({
+      startIndex: 1,
+      ranges: [{ startMs: 1500, endMs: 2000 }],
+    });
   });
 });

@@ -1,122 +1,48 @@
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
+import { LessonDashboardList } from '@/src/features/lessons/components/lesson-dashboard-list';
 import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+  LearningProgressCard,
+  LessonDashboardHeader,
+  LessonSummaryCards,
+} from '@/src/features/lessons/components/lesson-dashboard-summary';
+import { LessonDashboardState } from '@/src/features/lessons/components/lesson-dashboard-state';
+import { useLessonDashboardData } from '@/src/features/lessons/hooks/use-lesson-dashboard-data';
+import { setActiveLesson } from '@/src/features/lessons/progression-storage';
 import {
-  getLessonProgressState,
-  setActiveLesson,
-  type LessonProgressState,
-} from '@/src/features/lessons/progression-storage';
-import { sortLessonsByLevelOrder } from '@/src/features/lessons/lesson-locking';
-import { apiClient, ApiError } from '@/src/shared/api/client';
+  buildLessonDashboardSummary,
+  getLessonCardStatus,
+  resolveCurrentLessonId,
+} from '@/src/features/lessons/services/lesson-dashboard-helpers';
 import { useSession } from '@/src/shared/auth/session-context';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
+import { styles } from '@/src/features/lessons/screens/lesson-list-screen.styles';
 import type { Lesson } from '@/src/types/domain';
-import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
 
-const EMPTY_PROGRESS_STATE: LessonProgressState = {
-  completedLessonIds: [],
-  activeLessonId: null,
-  updatedAt: '',
-};
+export { getLessonCardStatus, resolveCurrentLessonId };
 
 export function LessonListScreen() {
   const router = useRouter();
   const { token, user, refreshProfile } = useSession();
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [progressState, setProgressState] = useState<LessonProgressState>(EMPTY_PROGRESS_STATE);
-
-  const loadProgressState = useCallback(async () => {
-    if (!user?.id) {
-      setProgressState(EMPTY_PROGRESS_STATE);
-      return EMPTY_PROGRESS_STATE;
-    }
-
-    const next = await getLessonProgressState(user.id);
-    setProgressState(next);
-    return next;
-  }, [user?.id]);
-
-  const fetchLessons = useCallback(
-    async (isRefresh = false) => {
-      if (!token) return;
-
-      if (isRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
-
-      setError(null);
-      try {
-        const response = await apiClient.getLessons(token);
-        const sortedLessons = [...response.lessons].sort(sortLessonsByLevelOrder);
-        setLessons(sortedLessons);
-        await loadProgressState();
-      } catch (err) {
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Failed to load lessons.');
-        }
-      } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
-      }
-    },
-    [loadProgressState, token],
+  const {
+    error,
+    fetchLessons,
+    isLoading,
+    isRefreshing,
+    lessons,
+    loadProgressState,
+    progressState,
+  } = useLessonDashboardData({
+    refreshProfile,
+    token,
+    userId: user?.id,
+  });
+  const summary = useMemo(
+    () => buildLessonDashboardSummary(lessons, progressState),
+    [lessons, progressState],
   );
-
-  useEffect(() => {
-    if (!token) return;
-    refreshProfile().catch(() => null);
-  }, [refreshProfile, token]);
-
-  useEffect(() => {
-    fetchLessons().catch(() => null);
-  }, [fetchLessons]);
-
-  useFocusEffect(
-    useCallback(() => {
-      loadProgressState().catch(() => null);
-      return undefined;
-    }, [loadProgressState]),
-  );
-
-  const completedSet = useMemo(() => {
-    const validCompleted = progressState.completedLessonIds.filter((lessonId) =>
-      lessons.some((lesson) => lesson.id === lessonId),
-    );
-    return new Set(validCompleted);
-  }, [lessons, progressState.completedLessonIds]);
-
-  const currentLessonId = useMemo(
-    () => resolveCurrentLessonId(lessons, progressState.activeLessonId, completedSet),
-    [completedSet, lessons, progressState.activeLessonId],
-  );
-
-  const totalLessons = lessons.length;
-  const completedLessons = completedSet.size;
-  const progressPercent = totalLessons
-    ? Math.round((completedLessons / totalLessons) * 100)
-    : 0;
-  const currentLesson = currentLessonId
-    ? lessons.find((lesson) => lesson.id === currentLessonId) ?? null
-    : null;
 
   const handleOpenLesson = useCallback(
     async (item: Lesson) => {
@@ -132,11 +58,9 @@ export function LessonListScreen() {
 
   if (!token) {
     return (
-      <ScreenContainer>
-        <View style={styles.center}>
-          <Text style={styles.meta}>Please sign in first.</Text>
-        </View>
-      </ScreenContainer>
+      <LessonDashboardState>
+        <Text style={styles.meta}>Please sign in first.</Text>
+      </LessonDashboardState>
     );
   }
 
@@ -157,351 +81,48 @@ export function LessonListScreen() {
 
   if (isLoading) {
     return (
-      <ScreenContainer>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" />
-          <Text style={styles.meta}>Loading lessons...</Text>
-        </View>
-      </ScreenContainer>
+      <LessonDashboardState>
+        <ActivityIndicator size="large" />
+        <Text style={styles.meta}>Loading lessons...</Text>
+      </LessonDashboardState>
     );
   }
 
   if (error) {
     return (
-      <ScreenContainer>
-        <View style={styles.center}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable onPress={() => fetchLessons().catch(() => null)} style={styles.retryButton}>
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
-        </View>
-      </ScreenContainer>
+      <LessonDashboardState>
+        <Text style={styles.error}>{error}</Text>
+        <Pressable onPress={() => fetchLessons().catch(() => null)} style={styles.retryButton}>
+          <Text style={styles.retryText}>Retry</Text>
+        </Pressable>
+      </LessonDashboardState>
     );
   }
 
   return (
     <ScreenContainer>
-      <View style={styles.header}>
-        <Text style={styles.title}>Dashboard</Text>
-        <Text style={styles.meta}>Pick any level. Badges show your progress.</Text>
-      </View>
-
-      <View style={styles.summaryRow}>
-        <SummaryCard label="Total Lessons" value={String(totalLessons)} />
-        <SummaryCard label="Completed" value={String(completedLessons)} />
-      </View>
-
-      <View style={styles.progressCard}>
-        <View style={styles.progressHeader}>
-          <Text style={styles.progressTitle}>Learning Progress</Text>
-          <Text style={styles.progressValue}>{progressPercent}%</Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
-        </View>
-        <Text style={styles.currentLessonMeta}>
-          {currentLesson
-            ? `Current level: ${currentLesson.title}`
-            : totalLessons
-              ? 'All levels completed. Great work.'
-              : 'No lessons available yet.'}
-        </Text>
-      </View>
-
-      <FlatList
-        data={lessons}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => {
-          const status = getLessonCardStatus({
-            lessonId: item.id,
-            completedSet,
-            currentLessonId,
-          });
-          const isCompleted = status === 'COMPLETED';
-          const isCurrent = status === 'CURRENT';
-
-          return (
-            <Pressable
-              onPress={() => {
-                void handleOpenLesson(item);
-              }}
-              style={({ pressed }) => [
-                styles.card,
-                isCurrent && styles.cardCurrent,
-                pressed && styles.cardPressed,
-              ]}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{`Level ${index + 1}: ${item.title}`}</Text>
-                <Text
-                  style={[
-                    styles.status,
-                    isCompleted
-                      ? styles.statusCompleted
-                      : isCurrent
-                        ? styles.statusCurrent
-                        : styles.statusOpen,
-                  ]}>
-                  {status}
-                </Text>
-              </View>
-
-              <Text style={styles.cardDescription}>{item.description || 'No description provided.'}</Text>
-              <Text style={styles.cardMeta}>{item.items?.length ?? 0} items</Text>
-            </Pressable>
-          );
+      <LessonDashboardHeader />
+      <LessonSummaryCards
+        completedLessons={summary.completedLessons}
+        totalLessons={summary.totalLessons}
+      />
+      <LearningProgressCard
+        currentLesson={summary.currentLesson}
+        progressPercent={summary.progressPercent}
+        totalLessons={summary.totalLessons}
+      />
+      <LessonDashboardList
+        completedSet={summary.completedSet}
+        currentLessonId={summary.currentLessonId}
+        isRefreshing={isRefreshing}
+        lessons={lessons}
+        onOpenLesson={(lesson) => {
+          void handleOpenLesson(lesson);
         }}
-        ListEmptyComponent={
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>No lessons yet.</Text>
-            <Text style={styles.emptyText}>Published lessons will appear here.</Text>
-          </View>
-        }
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={() => {
-              fetchLessons(true).catch(() => null);
-            }}
-          />
-        }
-        showsVerticalScrollIndicator={false}
+        onRefresh={() => {
+          fetchLessons(true).catch(() => null);
+        }}
       />
     </ScreenContainer>
   );
 }
-
-function SummaryCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryValue}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
-    </View>
-  );
-}
-
-export function resolveCurrentLessonId(
-  lessons: Lesson[],
-  activeLessonId: string | null,
-  completedSet: Set<string>,
-) {
-  if (!lessons.length) {
-    return null;
-  }
-
-  if (
-    activeLessonId &&
-    lessons.some((lesson) => lesson.id === activeLessonId) &&
-    !completedSet.has(activeLessonId)
-  ) {
-    return activeLessonId;
-  }
-
-  const next = lessons.find((lesson) => !completedSet.has(lesson.id));
-  if (next) {
-    return next.id;
-  }
-
-  return lessons[lessons.length - 1]?.id ?? null;
-}
-
-type LessonCardStatus = 'COMPLETED' | 'CURRENT' | 'OPEN';
-
-export function getLessonCardStatus(input: {
-  lessonId: string;
-  completedSet: Set<string>;
-  currentLessonId: string | null;
-}): LessonCardStatus {
-  const { lessonId, completedSet, currentLessonId } = input;
-
-  if (completedSet.has(lessonId)) {
-    return 'COMPLETED';
-  }
-
-  if (currentLessonId === lessonId) {
-    return 'CURRENT';
-  }
-
-  return 'OPEN';
-}
-
-const styles = StyleSheet.create({
-  center: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 12,
-    justifyContent: 'center',
-  },
-  title: {
-    color: text.primary,
-    fontSize: fontSize['4xl'],
-    fontWeight: fontWeight.bold,
-    marginBottom: 4,
-  },
-  meta: {
-    color: text.secondary,
-    fontSize: fontSize.md,
-  },
-  error: {
-    color: text.error,
-    fontSize: fontSize.md,
-    textAlign: 'center',
-  },
-  retryButton: {
-    backgroundColor: brand[700],
-    borderRadius: radii.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  retryText: {
-    color: neutral[0],
-    fontWeight: fontWeight.semibold,
-  },
-  header: {
-    marginBottom: 12,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  summaryCard: {
-    alignItems: 'center',
-    backgroundColor: surface.card,
-    borderColor: border.subtle,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    flex: 1,
-    paddingVertical: 10,
-  },
-  summaryValue: {
-    color: text.brand,
-    fontSize: 19,
-    fontWeight: fontWeight.bold,
-  },
-  summaryLabel: {
-    color: text.muted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
-  },
-  progressCard: {
-    backgroundColor: surface.card,
-    borderColor: border.subtle,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 12,
-  },
-  progressHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  progressTitle: {
-    color: text.primary,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-  },
-  progressValue: {
-    color: text.brand,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-  },
-  progressTrack: {
-    backgroundColor: neutral[200],
-    borderRadius: radii.full,
-    height: 10,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    backgroundColor: brand[700],
-    borderRadius: radii.full,
-    height: '100%',
-  },
-  currentLessonMeta: {
-    color: text.secondary,
-    fontSize: fontSize.base,
-    marginTop: 8,
-  },
-  listContent: {
-    gap: 12,
-    paddingBottom: 24,
-  },
-  card: {
-    backgroundColor: surface.card,
-    borderColor: border.subtle,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    gap: 8,
-    padding: 14,
-  },
-  cardPressed: {
-    opacity: 0.85,
-  },
-  cardCurrent: {
-    borderColor: brand[700],
-    borderWidth: 2,
-  },
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cardTitle: {
-    color: text.primary,
-    flex: 1,
-    fontSize: 17,
-    fontWeight: fontWeight.semibold,
-    marginRight: 12,
-  },
-  status: {
-    borderRadius: radii.full,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-    overflow: 'hidden',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  statusCompleted: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-  },
-  statusCurrent: {
-    backgroundColor: '#ccfbf1',
-    color: brand[800],
-  },
-  statusOpen: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
-  },
-  cardDescription: {
-    color: neutral[700],
-    fontSize: fontSize.md,
-    lineHeight: 20,
-  },
-  cardMeta: {
-    color: text.secondary,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.medium,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: surface.card,
-    borderColor: border.default,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    padding: 16,
-  },
-  emptyTitle: {
-    color: text.primary,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-    marginBottom: 4,
-  },
-  emptyText: {
-    color: text.secondary,
-    fontSize: fontSize.base,
-    textAlign: 'center',
-  },
-});
