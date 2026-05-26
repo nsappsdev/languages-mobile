@@ -1,5 +1,6 @@
 import {
   applyVocabularyReviewStatus,
+  buildLessonDictionarySummary,
   buildVocabularySummary,
   getActiveVocabularyItems,
 } from '../vocabulary-screen-helpers';
@@ -40,6 +41,8 @@ describe('vocabulary screen helpers', () => {
       NEW: 1,
       REVIEWING: 1,
       MASTERED: 1,
+      LEARNING: 0,
+      LEARNED: 0,
     });
   });
 
@@ -68,5 +71,51 @@ describe('vocabulary screen helpers', () => {
     expect(updated[0]).toBe(items[0]);
     expect(updated[1].status).toBe('MASTERED');
     expect(updated[1].updatedAt).toBe('2026-05-21T10:00:00.000Z');
+  });
+
+  it('summarizes lesson dictionary rows by active review stage', () => {
+    const summary = buildLessonDictionarySummary([
+      {
+        id: 'lesson-1',
+        lessonId: 'lesson-1',
+        title: 'Lesson 1',
+        description: null,
+        lesson: {
+          id: 'lesson-1',
+          title: 'Lesson 1',
+          description: null,
+          status: 'PUBLISHED',
+          items: [],
+        },
+        items: [
+          {
+            ...createVocabularyItem('one', 'LEARNING'),
+            status: 'LEARNING',
+            lessonId: 'lesson-1',
+            rightSwipes: 0,
+            leftSwipes: 0,
+            lastReviewedAt: null,
+            firstSeenAt: null,
+            localStage: 'first_learned',
+          },
+          {
+            ...createVocabularyItem('two', 'LEARNING'),
+            status: 'LEARNING',
+            lessonId: 'lesson-1',
+            rightSwipes: 0,
+            leftSwipes: 0,
+            lastReviewedAt: null,
+            firstSeenAt: null,
+          },
+        ],
+      },
+    ]);
+
+    expect(summary).toEqual({
+      firstLearned: 1,
+      lessons: 1,
+      needsReview: 1,
+      total: 2,
+    });
   });
 });

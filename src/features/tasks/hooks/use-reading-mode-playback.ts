@@ -3,6 +3,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { CONTIGUOUS_RANGE_TOLERANCE_MS } from '@/src/features/tasks/constants/task-runner';
 import {
   buildReadingModeScript,
+  resumePlaybackRanges,
   type PlaybackRange,
 } from '@/src/features/tasks/services/reading-mode-script';
 import { wait } from '@/src/features/tasks/services/task-runner-helpers';
@@ -36,6 +37,10 @@ export function useReadingModePlayback({
 }) {
   const [activeModeId, setActiveModeId] = useState<ReadingModeId | null>(null);
   const modePlaybackRunIdRef = useRef(0);
+  const modePlaybackProgressRef = useRef<{
+    modeId: ReadingModeId;
+    rangeIndex: number;
+  } | null>(null);
 
   const cancelModePlayback = useCallback(
     ({ pause = true }: { pause?: boolean } = {}) => {
@@ -44,6 +49,7 @@ export function useReadingModePlayback({
         player.pause();
       }
       setActiveModeId(null);
+      modePlaybackProgressRef.current = null;
     },
     [player],
   );
@@ -74,10 +80,20 @@ export function useReadingModePlayback({
   );
 
   const runRangeScript = useCallback(
-    async (ranges: PlaybackRange[], runId: number) => {
+    async (
+      modeId: ReadingModeId,
+      ranges: PlaybackRange[],
+      runId: number,
+      baseRangeIndex = 0,
+    ) => {
       let previousEndMs: number | null = null;
-      for (const range of ranges) {
+      for (let rangeOffset = 0; rangeOffset < ranges.length; rangeOffset += 1) {
+        const range = ranges[rangeOffset];
         if (modePlaybackRunIdRef.current !== runId) return;
+        modePlaybackProgressRef.current = {
+          modeId,
+          rangeIndex: baseRangeIndex + rangeOffset,
+        };
         scrollToSegment(getSegmentIdAtMs(range.startMs));
         const canContinueFromPrevious =
           previousEndMs !== null &&
@@ -108,6 +124,7 @@ export function useReadingModePlayback({
       player.pause();
       if (modePlaybackRunIdRef.current === runId) {
         setActiveModeId(null);
+        modePlaybackProgressRef.current = null;
       }
     },
     [getSegmentIdAtMs, player, scrollToSegment, triggerTranslationHeartbeat],
@@ -124,14 +141,49 @@ export function useReadingModePlayback({
       modePlaybackRunIdRef.current += 1;
       const runId = modePlaybackRunIdRef.current;
 
-      if (activeModeId === mode.id) {
+      if (activeModeId === mode.id && playbackStatus.playing) {
         player.pause();
-        setActiveModeId(null);
+        return;
+      }
+
+      if (activeModeId === mode.id && !playbackStatus.playing) {
+        setNotice(null);
+
+        if (mode.id === 'introduction') {
+          player.play();
+          return;
+        }
+
+        const ranges = currentItem
+          ? buildReadingModeScript({
+              currentItem,
+              durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
+              mode,
+              unknownNormalizedWords,
+            })
+          : [];
+        const resumeMs = Math.max(0, Math.round((playbackStatus.currentTime ?? 0) * 1000));
+        const progress = modePlaybackProgressRef.current;
+        const resumed = resumePlaybackRanges({
+          preferredRangeIndex: progress?.modeId === mode.id ? progress.rangeIndex : null,
+          ranges,
+          resumeMs,
+        });
+
+        if (!resumed.ranges.length) {
+          setActiveModeId(null);
+          modePlaybackProgressRef.current = null;
+          return;
+        }
+
+        scrollToSegment(getSegmentIdAtMs(resumed.ranges[0].startMs), false);
+        void runRangeScript(mode.id, resumed.ranges, runId, resumed.startIndex);
         return;
       }
 
       setNotice(null);
       setActiveModeId(mode.id);
+      modePlaybackProgressRef.current = null;
 
       if (mode.id === 'introduction') {
         scrollToSegment(getSegmentIdAtMs(0), false);
@@ -158,7 +210,7 @@ export function useReadingModePlayback({
       }
 
       scrollToSegment(getSegmentIdAtMs(ranges[0].startMs), false);
-      void runRangeScript(ranges, runId);
+      void runRangeScript(mode.id, ranges, runId);
     },
     [
       activeModeId,
@@ -167,6 +219,8 @@ export function useReadingModePlayback({
       getModeDisabledReason,
       getSegmentIdAtMs,
       player,
+      playbackStatus.currentTime,
+      playbackStatus.playing,
       runRangeScript,
       scrollToSegment,
       setNotice,

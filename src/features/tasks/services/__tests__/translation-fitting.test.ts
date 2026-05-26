@@ -30,7 +30,7 @@ describe('fitTranslationLabel', () => {
     expect(fit.letterSpacing).toBeGreaterThanOrEqual(settings.minLetterSpacing);
   });
 
-  it('falls back to configured minimums when the label cannot fully fit', () => {
+  it('falls back to configured minimums without widening the English token slot', () => {
     const fit = fitTranslationLabel({
       ...settings,
       availableWidth: 8,
@@ -39,6 +39,6 @@ describe('fitTranslationLabel', () => {
 
     expect(fit.fontSize).toBe(8);
     expect(fit.letterSpacing).toBe(-0.2);
-    expect(fit.containerWidth).toBeGreaterThan(8);
+    expect(fit.containerWidth).toBe(8);
   });
 });

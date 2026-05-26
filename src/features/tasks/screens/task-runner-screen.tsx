@@ -34,6 +34,7 @@ import { useTaskRunnerData } from '@/src/features/tasks/hooks/use-task-runner-da
 import {
   calculateCompletion,
   calculateTopSegmentScrollOffset,
+  buildVocabularyTokenMatches,
   createIdempotencyKey,
   formatSeconds,
   getAnticipatedSegmentId,
@@ -85,6 +86,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     vocabularyNotice,
   } = useRunnerVocabulary({
     entryCacheByText,
+    lessonId,
     token,
     userId: user?.id,
   });
@@ -267,6 +269,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     }
     return getTokenSegmentIds(wordTokens, currentItem.text, currentItem.segments);
   }, [currentItem, wordTokens]);
+
+  const vocabularyTokenMatches = useMemo(
+    () => buildVocabularyTokenMatches(wordTokens, Object.values(entryCacheByText)),
+    [entryCacheByText, wordTokens],
+  );
 
   useEffect(() => {
     setTokenWidths({});
@@ -608,6 +615,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               triggerTokenFeedback={triggerTokenFeedback}
               unknownTaps={unknownTaps}
               vocabularyByText={vocabularyByText}
+              vocabularyTokenMatches={vocabularyTokenMatches}
               wordTokens={wordTokens}
             />
 

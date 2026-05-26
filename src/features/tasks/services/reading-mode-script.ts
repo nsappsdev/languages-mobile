@@ -76,6 +76,42 @@ export function buildReadingModeScript({
   return ranges.filter((range) => range.endMs > range.startMs);
 }
 
+export function resumePlaybackRanges({
+  preferredRangeIndex,
+  ranges,
+  resumeMs,
+}: {
+  preferredRangeIndex?: number | null;
+  ranges: PlaybackRange[];
+  resumeMs: number;
+}) {
+  const startIndex =
+    preferredRangeIndex !== null &&
+    preferredRangeIndex !== undefined &&
+    ranges[preferredRangeIndex]?.endMs > resumeMs
+      ? preferredRangeIndex
+      : Math.max(0, ranges.findIndex((range) => range.endMs > resumeMs));
+
+  if (startIndex < 0 || startIndex >= ranges.length) {
+    return { ranges: [], startIndex: ranges.length };
+  }
+
+  const resumedRanges = ranges.slice(startIndex);
+  const firstRange = resumedRanges[0];
+  if (resumeMs > firstRange.startMs && resumeMs < firstRange.endMs) {
+    resumedRanges[0] = {
+      ...firstRange,
+      startMs: resumeMs,
+      pulseTargets: firstRange.pulseTargets?.filter((target) => target.endMs > resumeMs),
+    };
+  }
+
+  return {
+    ranges: resumedRanges.filter((range) => range.endMs > range.startMs),
+    startIndex,
+  };
+}
+
 function createWordOrPhraseRange(mark: LessonItem['wordTimings'][number]): PlaybackRange {
   const words = splitTimingWords(mark.text, mark.normalizedText);
   if (words.length <= 1) {

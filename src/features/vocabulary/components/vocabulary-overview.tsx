@@ -1,38 +1,28 @@
 import { Text, View } from 'react-native';
+import type { LessonDictionarySummary } from '@/src/features/vocabulary/services/vocabulary-screen-helpers';
 import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styles';
-import type { VocabularySummary } from '@/src/features/vocabulary/services/vocabulary-screen-helpers';
 
 export function VocabularyOverview({
-  reviewMeta,
   summary,
   syncMeta,
 }: {
-  reviewMeta: string | null;
-  summary: VocabularySummary;
+  summary: LessonDictionarySummary;
   syncMeta: string | null;
 }) {
   return (
-    <>
-      <View style={styles.header}>
-        <Text style={styles.title}>My Vocabulary</Text>
-        <Text style={styles.meta}>
-          Saved words are grouped by lesson topic. Open a lesson section or start Check to review
-          words with swipe gestures.
-        </Text>
-        <Text style={styles.meta}>
-          Learned words leave the active vocabulary list automatically after you swipe them right.
-        </Text>
-        {syncMeta ? <Text style={styles.syncMeta}>{syncMeta}</Text> : null}
-        {reviewMeta ? <Text style={styles.syncMeta}>{reviewMeta}</Text> : null}
-      </View>
+    <View style={styles.header}>
+      <Text style={styles.title}>Dictionary</Text>
+      <Text style={styles.meta}>
+        Saved unknown words are grouped by lesson. Tap a lesson title to open its dictionary.
+      </Text>
+      {syncMeta ? <Text style={styles.syncMeta}>{syncMeta}</Text> : null}
 
       <View style={styles.summaryRow}>
-        <SummaryCard label="Total" value={summary.total} />
-        <SummaryCard label="New" value={summary.NEW} />
-        <SummaryCard label="Reviewing" value={summary.REVIEWING} />
-        <SummaryCard label="Learned" value={summary.MASTERED} />
+        <SummaryCard label="Saved" value={summary.total} />
+        <SummaryCard label="Lessons" value={summary.lessons} />
+        <SummaryCard label="Review" value={summary.needsReview} />
       </View>
-    </>
+    </View>
   );
 }
 

@@ -88,12 +88,6 @@ export const styles = StyleSheet.create({
     gap: 10,
     padding: 14,
   },
-  sectionHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
   sectionHeadingCopy: {
     flex: 1,
     gap: 2,
@@ -126,64 +120,115 @@ export const styles = StyleSheet.create({
     fontSize: fontSize.base,
     lineHeight: 18,
   },
-  checkButton: {
-    backgroundColor: brand[700],
-    borderRadius: radii.full,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  checkButtonPressed: {
-    opacity: 0.85,
-  },
-  checkButtonText: {
-    color: neutral[0],
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-    textTransform: 'uppercase',
-  },
   sectionEntries: {
     gap: 8,
   },
-  card: {
+  dictionaryRow: {
     backgroundColor: surface.page,
     borderColor: border.subtle,
     borderRadius: radii.lg,
     borderWidth: 1,
-    gap: 6,
+    gap: 10,
     padding: 12,
   },
-  cardRow: {
+  dictionaryRowPressed: {
+    opacity: 0.85,
+  },
+  dictionaryRowFirstMissed: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
+  },
+  dictionaryRowFirstLearned: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#bfdbfe',
+  },
+  dictionaryRowFinalMissed: {
+    backgroundColor: '#991b1b',
+    borderColor: '#7f1d1d',
+  },
+  dictionaryRowFinalLearned: {
+    backgroundColor: '#1d4ed8',
+    borderColor: '#1e40af',
+  },
+  dictionaryTextRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    minHeight: 44,
   },
-  cardLeft: {
+  dictionaryEnglish: {
+    color: text.primary,
     flex: 1,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    lineHeight: 21,
     paddingRight: 10,
   },
-  cardDivider: {
+  dictionaryDivider: {
     alignSelf: 'stretch',
     backgroundColor: '#dbeafe',
     marginHorizontal: 4,
     width: 1,
   },
-  cardRight: {
+  dictionaryTranslationWrap: {
     flex: 1,
+    justifyContent: 'center',
     paddingLeft: 10,
   },
-  word: {
-    color: text.primary,
-    fontSize: 17,
-    fontWeight: fontWeight.bold,
-  },
-  translationPrimary: {
+  dictionaryTranslation: {
     color: text.brand,
-    fontSize: fontSize.xl,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    lineHeight: 21,
+  },
+  dictionaryTranslationInvisible: {
+    opacity: 0,
+    position: 'absolute',
+  },
+  dictionaryTranslationHidden: {
+    color: neutral[400],
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 0,
+    lineHeight: 21,
+  },
+  dictionaryTextOnDark: {
+    color: text.inverse,
+  },
+  dictionaryHiddenTextOnDark: {
+    color: 'rgba(255, 255, 255, 0.72)',
+  },
+  dictionaryActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dictionaryActionButton: {
+    alignItems: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  dictionaryActionPressed: {
+    opacity: 0.8,
+  },
+  dictionaryActionMissed: {
+    backgroundColor: '#fff7ed',
+    borderColor: border.warning,
+  },
+  dictionaryActionLearned: {
+    backgroundColor: surface.active,
+    borderColor: border.active,
+  },
+  dictionaryActionMissedText: {
+    color: text.warning,
+    fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
   },
-  moreMeta: {
-    color: text.muted,
+  dictionaryActionLearnedText: {
+    color: text.brand,
     fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
+    fontWeight: fontWeight.bold,
   },
   emptyCard: {
     alignItems: 'center',
@@ -202,109 +247,6 @@ export const styles = StyleSheet.create({
   emptyText: {
     color: text.secondary,
     fontSize: fontSize.base,
-    textAlign: 'center',
-  },
-  reviewHeader: {
-    gap: 6,
-    marginBottom: 14,
-  },
-  backButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 4,
-  },
-  backButtonText: {
-    color: text.brand,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.bold,
-  },
-  reviewLessonTitle: {
-    color: text.primary,
-    fontSize: fontSize['3xl'],
-    fontWeight: fontWeight.bold,
-  },
-  reviewProgress: {
-    color: text.muted,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-  },
-  reviewHintRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
-  reviewHintLeft: {
-    color: text.warning,
-    flex: 1,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-  },
-  reviewHintRight: {
-    color: text.brand,
-    flex: 1,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
-    textAlign: 'right',
-  },
-  reviewDeck: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  reviewCard: {
-    alignItems: 'center',
-    backgroundColor: surface.card,
-    borderColor: border.default,
-    borderRadius: radii['3xl'],
-    borderWidth: 1,
-    gap: 12,
-    maxWidth: 420,
-    paddingHorizontal: 24,
-    paddingVertical: 28,
-    width: '100%',
-  },
-  reviewEnglish: {
-    color: text.primary,
-    fontSize: fontSize['5xl'],
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  reviewMetaText: {
-    color: text.secondary,
-    fontSize: fontSize.base,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  reviewButtonsRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  reviewActionButton: {
-    borderRadius: radii.xl,
-    flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  reviewActionButtonLeft: {
-    backgroundColor: '#fff7ed',
-    borderColor: border.warning,
-    borderWidth: 1,
-  },
-  reviewActionButtonRight: {
-    backgroundColor: surface.active,
-    borderColor: border.active,
-    borderWidth: 1,
-  },
-  reviewActionTextLeft: {
-    color: text.warning,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
-    textAlign: 'center',
-  },
-  reviewActionTextRight: {
-    color: text.brand,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
     textAlign: 'center',
   },
 });

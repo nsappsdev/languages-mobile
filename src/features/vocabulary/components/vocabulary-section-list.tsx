@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'react';
 import {
+  Animated,
   FlatList,
   Pressable,
   RefreshControl,
@@ -6,7 +8,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import type { LessonVocabularySection } from '@/src/features/vocabulary/services/lesson-vocabulary';
+import type {
+  LessonVocabularyRow,
+  LessonVocabularySection,
+  VocabularyReviewDecision,
+  VocabularyReviewStage,
+} from '@/src/features/vocabulary/services/lesson-vocabulary';
+import { shouldRevealVocabularyTranslation } from '@/src/features/vocabulary/services/lesson-vocabulary';
 import { pickArmenianTranslationText } from '@/src/features/vocabulary/services/translation-display';
 import { neutral } from '@/src/shared/theme';
 import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styles';
@@ -14,8 +22,9 @@ import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styl
 export function VocabularySectionList({
   expandedSectionIds,
   isRefreshing,
+  onPlayContext,
   onRefresh,
-  onStartReview,
+  onReviewDecision,
   onToggleSection,
   searchQuery,
   sections,
@@ -23,8 +32,13 @@ export function VocabularySectionList({
 }: {
   expandedSectionIds: Set<string>;
   isRefreshing: boolean;
+  onPlayContext: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
   onRefresh: () => void;
-  onStartReview: (section: LessonVocabularySection) => void;
+  onReviewDecision: (
+    section: LessonVocabularySection,
+    row: LessonVocabularyRow,
+    decision: VocabularyReviewDecision,
+  ) => void;
   onToggleSection: (sectionId: string) => void;
   searchQuery: string;
   sections: LessonVocabularySection[];
@@ -46,7 +60,8 @@ export function VocabularySectionList({
         renderItem={({ item }) => (
           <VocabularySectionCard
             isExpanded={expandedSectionIds.has(item.id)}
-            onStartReview={onStartReview}
+            onPlayContext={onPlayContext}
+            onReviewDecision={onReviewDecision}
             onToggleSection={onToggleSection}
             section={item}
           />
@@ -59,7 +74,7 @@ export function VocabularySectionList({
             <Text style={styles.emptyText}>
               {searchQuery.trim()
                 ? 'Try another English or Armenian search term.'
-                : 'Tap translated words in lessons to build lesson sections here.'}
+                : 'Tap unknown translated words in lessons to save them here.'}
             </Text>
           </View>
         }
@@ -73,42 +88,37 @@ export function VocabularySectionList({
 
 function VocabularySectionCard({
   isExpanded,
-  onStartReview,
+  onPlayContext,
+  onReviewDecision,
   onToggleSection,
   section,
 }: {
   isExpanded: boolean;
-  onStartReview: (section: LessonVocabularySection) => void;
+  onPlayContext: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
+  onReviewDecision: (
+    section: LessonVocabularySection,
+    row: LessonVocabularyRow,
+    decision: VocabularyReviewDecision,
+  ) => void;
   onToggleSection: (sectionId: string) => void;
   section: LessonVocabularySection;
 }) {
   return (
     <View style={styles.sectionCard}>
-      <View style={styles.sectionHeader}>
-        <Pressable
-          onPress={() => onToggleSection(section.id)}
-          style={({ pressed }) => [
-            styles.sectionHeadingCopy,
-            pressed && styles.sectionHeadingCopyPressed,
-          ]}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-            <Text style={styles.sectionChevron}>{isExpanded ? '▾' : '▸'}</Text>
-          </View>
-          <Text style={styles.sectionMeta}>
-            {section.items.length} saved {section.items.length === 1 ? 'word' : 'words'}
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onStartReview(section)}
-          disabled={section.items.length === 0}
-          style={({ pressed }) => [
-            styles.checkButton,
-            pressed && section.items.length > 0 && styles.checkButtonPressed,
-          ]}>
-          <Text style={styles.checkButtonText}>Check</Text>
-        </Pressable>
-      </View>
+      <Pressable
+        onPress={() => onToggleSection(section.id)}
+        style={({ pressed }) => [
+          styles.sectionHeadingCopy,
+          pressed && styles.sectionHeadingCopyPressed,
+        ]}>
+        <View style={styles.sectionTitleRow}>
+          <Text style={styles.sectionTitle}>{section.title}</Text>
+          <Text style={styles.sectionChevron}>{isExpanded ? '▾' : '▸'}</Text>
+        </View>
+        <Text style={styles.sectionMeta}>
+          {section.items.length} saved {section.items.length === 1 ? 'word' : 'words'}
+        </Text>
+      </Pressable>
 
       {isExpanded ? (
         <>
@@ -117,32 +127,134 @@ function VocabularySectionCard({
           ) : null}
 
           <View style={styles.sectionEntries}>
-            {section.items.slice(0, 6).map((entry) => {
-              const translation =
-                pickArmenianTranslationText(entry.entry.translations) ??
-                'No Armenian translation yet.';
-
-              return (
-                <View key={entry.id} style={styles.card}>
-                  <View style={styles.cardRow}>
-                    <View style={styles.cardLeft}>
-                      <Text style={styles.word}>{entry.entry.englishText}</Text>
-                    </View>
-                    <View style={styles.cardDivider} />
-                    <View style={styles.cardRight}>
-                      <Text style={styles.translationPrimary}>{translation}</Text>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
+            {section.items.map((row) => (
+              <VocabularyDictionaryRow
+                key={row.entryId}
+                onPlayContext={() => onPlayContext(section, row)}
+                onReviewDecision={(decision) => onReviewDecision(section, row, decision)}
+                row={row}
+              />
+            ))}
           </View>
-
-          {section.items.length > 6 ? (
-            <Text style={styles.moreMeta}>+{section.items.length - 6} more in this lesson</Text>
-          ) : null}
         </>
       ) : null}
     </View>
   );
+}
+
+function VocabularyDictionaryRow({
+  onPlayContext,
+  onReviewDecision,
+  row,
+}: {
+  onPlayContext: () => void;
+  onReviewDecision: (decision: VocabularyReviewDecision) => void;
+  row: LessonVocabularyRow;
+}) {
+  const revealProgress = useRef(new Animated.Value(0)).current;
+  const translation = pickArmenianTranslationText(row.entry.translations) ?? '';
+  const shouldReveal = shouldRevealVocabularyTranslation(row.localStage);
+
+  useEffect(() => {
+    if (shouldReveal) {
+      Animated.timing(revealProgress, {
+        duration: 1500,
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      revealProgress.setValue(0);
+    }
+  }, [revealProgress, shouldReveal]);
+
+  return (
+    <Pressable
+      onLongPress={onPlayContext}
+      style={({ pressed }) => [
+        styles.dictionaryRow,
+        getStageStyle(row.localStage),
+        pressed && styles.dictionaryRowPressed,
+      ]}>
+      <View style={styles.dictionaryTextRow}>
+        <Text style={[styles.dictionaryEnglish, getStageTextStyle(row.localStage)]}>
+          {row.entry.englishText}
+        </Text>
+        <View style={styles.dictionaryDivider} />
+        <View style={styles.dictionaryTranslationWrap}>
+          {!shouldReveal ? (
+            <Text style={[styles.dictionaryTranslationHidden, getHiddenStageTextStyle(row.localStage)]}>
+              {buildHiddenTranslation(translation)}
+            </Text>
+          ) : null}
+          <Animated.Text
+            style={[
+              styles.dictionaryTranslation,
+              getTranslationStageTextStyle(row.localStage),
+              shouldReveal ? { opacity: revealProgress } : styles.dictionaryTranslationInvisible,
+            ]}>
+            {translation}
+          </Animated.Text>
+        </View>
+      </View>
+
+      <View style={styles.dictionaryActionsRow}>
+        <Pressable
+          onPress={() => onReviewDecision('not_learned')}
+          style={({ pressed }) => [
+            styles.dictionaryActionButton,
+            styles.dictionaryActionMissed,
+            pressed && styles.dictionaryActionPressed,
+          ]}>
+          <Text style={styles.dictionaryActionMissedText}>Not learned</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => onReviewDecision('learned')}
+          style={({ pressed }) => [
+            styles.dictionaryActionButton,
+            styles.dictionaryActionLearned,
+            pressed && styles.dictionaryActionPressed,
+          ]}>
+          <Text style={styles.dictionaryActionLearnedText}>{getLearnedButtonLabel(row.localStage)}</Text>
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
+
+function getLearnedButtonLabel(stage?: VocabularyReviewStage) {
+  return stage ? 'Learned' : 'Learned once';
+}
+
+function buildHiddenTranslation(translation: string) {
+  const length = Math.max(6, Math.min(16, translation.length || 8));
+  return '█'.repeat(length);
+}
+
+function getStageStyle(stage?: VocabularyReviewStage) {
+  switch (stage) {
+    case 'first_missed':
+      return styles.dictionaryRowFirstMissed;
+    case 'first_learned':
+      return styles.dictionaryRowFirstLearned;
+    case 'final_missed':
+      return styles.dictionaryRowFinalMissed;
+    case 'final_learned':
+      return styles.dictionaryRowFinalLearned;
+    default:
+      return null;
+  }
+}
+
+function getStageTextStyle(stage?: VocabularyReviewStage) {
+  return stage === 'final_missed' || stage === 'final_learned'
+    ? styles.dictionaryTextOnDark
+    : null;
+}
+
+function getTranslationStageTextStyle(stage?: VocabularyReviewStage) {
+  return stage === 'final_learned' ? styles.dictionaryTextOnDark : null;
+}
+
+function getHiddenStageTextStyle(stage?: VocabularyReviewStage) {
+  return stage === 'final_missed' ? styles.dictionaryHiddenTextOnDark : null;
 }

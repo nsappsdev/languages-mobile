@@ -3,6 +3,7 @@ import type { ReadingModeSettings } from '@/src/types/domain';
 export const TOKEN_WORD_FONT_SIZE = 18;
 export const TOKEN_WORD_LINE_HEIGHT = 24;
 export const TOKEN_WORD_HORIZONTAL_PADDING = 3;
+export const MAX_VOCABULARY_TOKEN_MATCH_WORDS = 7;
 export const CONTIGUOUS_RANGE_TOLERANCE_MS = 20;
 export const ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS = 650;
 

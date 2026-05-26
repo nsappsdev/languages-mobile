@@ -2,13 +2,19 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useState } from 'react';
 import { sortLessonsByLevelOrder } from '@/src/features/lessons/lesson-locking';
 import {
-  applyVocabularyStatusOverrides,
-  getCachedVocabulary,
-  setCachedVocabulary,
-} from '@/src/features/vocabulary/services/vocabulary-sync';
-import { getQueuedVocabularyStatusUpdates } from '@/src/features/vocabulary/services/vocabulary-status-sync';
+  applyVocabularyReviewStatesToSections,
+  buildLessonVocabularySections,
+  type LessonVocabularyPayload,
+  type LessonVocabularySection,
+} from '@/src/features/vocabulary/services/lesson-vocabulary';
+import {
+  getCachedLessonVocabularySections,
+  getVocabularyReviewStates,
+  markVocabularyReviewStateSynced,
+  setCachedLessonVocabularyPayloads,
+  setCachedLessonVocabularySections,
+} from '@/src/features/vocabulary/services/lesson-vocabulary-cache';
 import { apiClient, ApiError } from '@/src/shared/api/client';
-import type { LearnerVocabularyItem, Lesson } from '@/src/types/domain';
 
 export function useVocabularyData({
   token,
@@ -17,12 +23,21 @@ export function useVocabularyData({
   token: string | null;
   userId: string | undefined;
 }) {
-  const [items, setItems] = useState<LearnerVocabularyItem[]>([]);
-  const [lessons, setLessons] = useState<Lesson[]>([]);
+  const [sections, setSections] = useState<LessonVocabularySection[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncMeta, setSyncMeta] = useState<string | null>(null);
+
+  const refreshFromCache = useCallback(async () => {
+    if (!userId) return;
+    const cached = await getCachedLessonVocabularySections(userId);
+    if (cached.length) {
+      const reviewStates = await getVocabularyReviewStates(userId);
+      setSections(applyVocabularyReviewStatesToSections(cached, reviewStates));
+      setSyncMeta('Showing last synced dictionary snapshot.');
+    }
+  }, [userId]);
 
   const fetchVocabulary = useCallback(
     async (isRefresh = false) => {
@@ -37,52 +52,75 @@ export function useVocabularyData({
       setError(null);
       setSyncMeta(null);
       try {
-        const [vocabularyResponse, lessonsResponse] = await Promise.all([
-          apiClient.getMyVocabulary(token),
-          apiClient.getLessons(token),
-        ]);
-        const sortedLessons = [...lessonsResponse.lessons].sort(sortLessonsByLevelOrder);
-        const pendingStatusUpdates = await getQueuedVocabularyStatusUpdates(userId);
-        const vocabulary = applyVocabularyStatusOverrides(
-          vocabularyResponse.vocabulary,
-          pendingStatusUpdates,
+        const lessonsResponse = await apiClient.getLessons(token);
+        const lessons = [...lessonsResponse.lessons].sort(sortLessonsByLevelOrder);
+        const reviewStates = await getVocabularyReviewStates(userId);
+
+        await Promise.all(
+          reviewStates
+            .filter((state) => state.pending)
+            .map(async (state) => {
+              await apiClient.updateLessonVocabularyStatus(
+                token,
+                state.lessonId,
+                state.entryId,
+                state.status,
+              );
+              await markVocabularyReviewStateSynced(userId, state.entryId);
+            }),
+        ).catch(() => {
+          setSyncMeta('Some dictionary changes are saved locally and still syncing.');
+        });
+
+        const latestReviewStates = await getVocabularyReviewStates(userId);
+        const vocabularyEntries = await Promise.all(
+          lessons.map(async (lesson) => {
+            try {
+              const response = await apiClient.getLessonVocabulary(token, lesson.id);
+              return [lesson.id, response.vocabulary] as const;
+            } catch {
+              return [lesson.id, undefined] as const;
+            }
+          }),
         );
-        setItems(vocabulary);
-        setLessons(sortedLessons);
-        await setCachedVocabulary(userId, vocabulary);
-        if (pendingStatusUpdates.length > 0) {
-          setSyncMeta('Some vocabulary changes are saved locally and still syncing.');
-        }
+        const vocabularyByLessonId = Object.fromEntries(
+          vocabularyEntries.filter(
+            (entry): entry is readonly [string, LessonVocabularyPayload] => Boolean(entry[1]),
+          ),
+        );
+        const sections = buildLessonVocabularySections({
+          lessons,
+          reviewStates: latestReviewStates,
+          vocabularyByLessonId,
+        });
+
+        setSections(sections);
+        await setCachedLessonVocabularyPayloads(userId, vocabularyByLessonId);
+        await setCachedLessonVocabularySections(userId, sections);
       } catch (err) {
+        await refreshFromCache();
+
         if (err instanceof ApiError && err.status === 401) {
           return;
         }
-
-        const cached = await getCachedVocabulary(userId);
-        if (cached.length > 0) {
-          setItems(cached);
-          setSyncMeta('Showing last synced vocabulary snapshot.');
-        }
-
         if (err instanceof ApiError) {
           setError(err.message);
         } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError('Failed to load vocabulary.');
+          setError('Failed to load dictionary.');
         }
       } finally {
         setIsLoading(false);
         setIsRefreshing(false);
       }
     },
-    [token, userId],
+    [refreshFromCache, token, userId],
   );
 
   useEffect(() => {
     if (!token || !userId) {
-      setItems([]);
-      setLessons([]);
+      setSections([]);
       setIsLoading(false);
       return;
     }
@@ -90,10 +128,11 @@ export function useVocabularyData({
     let isMounted = true;
     const bootstrap = async () => {
       setIsLoading(true);
-      const cached = await getCachedVocabulary(userId);
+      const cached = await getCachedLessonVocabularySections(userId);
       if (isMounted && cached.length > 0) {
-        setItems(cached);
-        setSyncMeta('Showing last synced vocabulary snapshot.');
+        const reviewStates = await getVocabularyReviewStates(userId);
+        setSections(applyVocabularyReviewStatesToSections(cached, reviewStates));
+        setSyncMeta('Showing last synced dictionary snapshot.');
         setIsLoading(false);
       }
 
@@ -119,9 +158,8 @@ export function useVocabularyData({
     fetchVocabulary,
     isLoading,
     isRefreshing,
-    items,
-    lessons,
-    setItems,
+    sections,
+    setSections,
     setSyncMeta,
     syncMeta,
   };

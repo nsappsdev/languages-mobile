@@ -40,7 +40,7 @@ export function useTaskRunnerData({ lessonId, token }: { lessonId: string; token
         if (cancelled) return;
         setLesson(lessonResponse.lesson);
         setAppSettings(settingsResponse.settings);
-        const dictionary = lessonResponse.lesson.dictionary ?? [];
+        const dictionary = lessonResponse.lesson.vocabulary ?? lessonResponse.lesson.dictionary ?? [];
         if (dictionary.length) {
           setEntryCacheByText((prev) => ({ ...prev, ...buildEntryCacheByText(dictionary) }));
           void setCachedLessonDictionary(lessonId, dictionary);

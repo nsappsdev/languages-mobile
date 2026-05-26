@@ -124,19 +124,25 @@ export const styles = StyleSheet.create({
   },
   tokenWrapper: {
     alignItems: 'center',
+    flexShrink: 1,
     marginBottom: 4,
+    maxWidth: '100%',
   },
   tokenPulse: {
     alignItems: 'center',
+    maxWidth: '100%',
+    position: 'relative',
   },
   tokenTranslation: {
+    alignSelf: 'center',
     color: '#0f766e',
     fontSize: 10,
     fontWeight: fontWeight.bold,
     height: 13,
     lineHeight: 13,
-    marginBottom: 3,
+    position: 'absolute',
     textAlign: 'center',
+    top: 0,
   },
   tokenTranslationHidden: {
     opacity: 0,
@@ -144,6 +150,8 @@ export const styles = StyleSheet.create({
   tokenWord: {
     borderRadius: radii.sm,
     color: text.primary,
+    flexShrink: 1,
+    flexWrap: 'wrap',
     fontSize: TOKEN_WORD_FONT_SIZE,
     lineHeight: TOKEN_WORD_LINE_HEIGHT,
     paddingHorizontal: TOKEN_WORD_HORIZONTAL_PADDING,
