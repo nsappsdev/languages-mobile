@@ -26,6 +26,9 @@ export function TaskWordFlow({
   handleTokenWordLayout,
   handleToggleWordVocabulary,
   isPlaying,
+  mainTextFontFamily,
+  mainTextFontSize,
+  mainTextLineHeight,
   onLayout,
   pendingWords,
   segmentStartById,
@@ -47,6 +50,9 @@ export function TaskWordFlow({
   handleTokenWordLayout: (tokenKey: string, event: LayoutChangeEvent) => void;
   handleToggleWordVocabulary: (rawWord: string, normalizedWord: string | null) => void;
   isPlaying: boolean;
+  mainTextFontFamily: string | undefined;
+  mainTextFontSize: number;
+  mainTextLineHeight: number;
   onLayout: (event: LayoutChangeEvent) => void;
   pendingWords: Record<string, true>;
   segmentStartById: Record<string, number>;
@@ -87,7 +93,15 @@ export function TaskWordFlow({
           return (
             <Text
               key={tok.key}
-              style={[styles.wordWhitespace, isActiveSegment && styles.tokenWordActive]}>
+              style={[
+                styles.wordWhitespace,
+                {
+                  fontFamily: mainTextFontFamily,
+                  fontSize: mainTextFontSize,
+                  lineHeight: mainTextLineHeight,
+                },
+                isActiveSegment && styles.tokenWordActive,
+              ]}>
               {tok.text}
             </Text>
           );
@@ -183,6 +197,11 @@ export function TaskWordFlow({
                 onLayout={(event) => handleTokenWordLayout(tokenKey, event)}
                 style={[
                   styles.tokenWord,
+                  {
+                    fontFamily: mainTextFontFamily,
+                    fontSize: mainTextFontSize,
+                    lineHeight: mainTextLineHeight,
+                  },
                   isActiveSegment && styles.tokenWordActive,
                   isSelected && styles.tokenWordSaved,
                   revealTranslation && !isSelected && styles.tokenWordUnknown,

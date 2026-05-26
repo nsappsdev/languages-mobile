@@ -197,39 +197,6 @@ export const styles = StyleSheet.create({
   dictionaryHiddenTextOnDark: {
     color: 'rgba(255, 255, 255, 0.72)',
   },
-  dictionaryActionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  dictionaryActionButton: {
-    alignItems: 'center',
-    borderRadius: radii.md,
-    borderWidth: 1,
-    flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  dictionaryActionPressed: {
-    opacity: 0.8,
-  },
-  dictionaryActionMissed: {
-    backgroundColor: '#fff7ed',
-    borderColor: border.warning,
-  },
-  dictionaryActionLearned: {
-    backgroundColor: surface.active,
-    borderColor: border.active,
-  },
-  dictionaryActionMissedText: {
-    color: text.warning,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-  },
-  dictionaryActionLearnedText: {
-    color: text.brand,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-  },
   emptyCard: {
     alignItems: 'center',
     backgroundColor: surface.card,

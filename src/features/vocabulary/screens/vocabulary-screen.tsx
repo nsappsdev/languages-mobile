@@ -90,6 +90,13 @@ export function VocabularyScreen() {
     [playAudioRange],
   );
 
+  const handlePlayWord = useCallback(
+    (section: LessonVocabularySection, row: LessonVocabularyRow) => {
+      void playAudioRange(findWordAudioRange(section.lesson, row.entry));
+    },
+    [playAudioRange],
+  );
+
   const handleReviewDecision = useCallback(
     (section: LessonVocabularySection, row: LessonVocabularyRow, decision: VocabularyReviewDecision) => {
       if (!token || !userId) return;
@@ -133,7 +140,6 @@ export function VocabularyScreen() {
         }, 650);
       }
 
-      void playAudioRange(findWordAudioRange(section.lesson, row.entry));
       void setVocabularyReviewState(userId, nextState)
         .then(() =>
           apiClient.updateLessonVocabularyStatus(
@@ -148,7 +154,7 @@ export function VocabularyScreen() {
           setSyncMeta('Dictionary change is saved locally and will sync when the API is reachable.');
         });
     },
-    [playAudioRange, setSections, setSyncMeta, token, userId],
+    [setSections, setSyncMeta, token, userId],
   );
 
   const toggleSectionExpanded = useCallback(
@@ -210,6 +216,7 @@ export function VocabularyScreen() {
         expandedSectionIds={expandedSectionIds}
         isRefreshing={isRefreshing}
         onPlayContext={handlePlayContext}
+        onPlayWord={handlePlayWord}
         onRefresh={() => {
           fetchVocabulary(true).catch(() => null);
         }}

@@ -19,6 +19,8 @@ import { flushProgressQueue, queueProgressEvents } from '@/src/features/progress
 import {
   ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS,
   DEFAULT_READING_MODES,
+  TOKEN_WORD_FONT_SIZE,
+  TOKEN_WORD_LINE_HEIGHT,
 } from '@/src/features/tasks/constants/task-runner';
 import {
   LessonProgressOverview,
@@ -275,9 +277,18 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     [entryCacheByText, wordTokens],
   );
 
+  const mainTextFontSize = appSettings?.mainTextFontSize ?? TOKEN_WORD_FONT_SIZE;
+  const mainTextLineHeight = Math.ceil(
+    mainTextFontSize * (TOKEN_WORD_LINE_HEIGHT / TOKEN_WORD_FONT_SIZE),
+  );
+  const mainTextFontFamily =
+    appSettings?.mainTextFontFamily && appSettings.mainTextFontFamily !== 'System'
+      ? appSettings.mainTextFontFamily
+      : undefined;
+
   useEffect(() => {
     setTokenWidths({});
-  }, [currentItem?.id]);
+  }, [currentItem?.id, mainTextFontFamily, mainTextFontSize]);
 
   const segmentStartById = useMemo(() => {
     const result: Record<string, number> = {};
@@ -605,6 +616,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               handleTokenWordLayout={handleTokenWordLayout}
               handleToggleWordVocabulary={handleToggleWordVocabulary}
               isPlaying={isPlaying}
+              mainTextFontFamily={mainTextFontFamily}
+              mainTextFontSize={mainTextFontSize}
+              mainTextLineHeight={mainTextLineHeight}
               onLayout={handleWordFlowLayout}
               pendingWords={pendingWords}
               segmentStartById={segmentStartById}

@@ -19,10 +19,13 @@ import { pickArmenianTranslationText } from '@/src/features/vocabulary/services/
 import { neutral } from '@/src/shared/theme';
 import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styles';
 
+const DOUBLE_TAP_DELAY_MS = 260;
+
 export function VocabularySectionList({
   expandedSectionIds,
   isRefreshing,
   onPlayContext,
+  onPlayWord,
   onRefresh,
   onReviewDecision,
   onToggleSection,
@@ -33,6 +36,7 @@ export function VocabularySectionList({
   expandedSectionIds: Set<string>;
   isRefreshing: boolean;
   onPlayContext: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
+  onPlayWord: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
   onRefresh: () => void;
   onReviewDecision: (
     section: LessonVocabularySection,
@@ -61,6 +65,7 @@ export function VocabularySectionList({
           <VocabularySectionCard
             isExpanded={expandedSectionIds.has(item.id)}
             onPlayContext={onPlayContext}
+            onPlayWord={onPlayWord}
             onReviewDecision={onReviewDecision}
             onToggleSection={onToggleSection}
             section={item}
@@ -89,12 +94,14 @@ export function VocabularySectionList({
 function VocabularySectionCard({
   isExpanded,
   onPlayContext,
+  onPlayWord,
   onReviewDecision,
   onToggleSection,
   section,
 }: {
   isExpanded: boolean;
   onPlayContext: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
+  onPlayWord: (section: LessonVocabularySection, row: LessonVocabularyRow) => void;
   onReviewDecision: (
     section: LessonVocabularySection,
     row: LessonVocabularyRow,
@@ -131,6 +138,7 @@ function VocabularySectionCard({
               <VocabularyDictionaryRow
                 key={row.entryId}
                 onPlayContext={() => onPlayContext(section, row)}
+                onPlayWord={() => onPlayWord(section, row)}
                 onReviewDecision={(decision) => onReviewDecision(section, row, decision)}
                 row={row}
               />
@@ -144,14 +152,18 @@ function VocabularySectionCard({
 
 function VocabularyDictionaryRow({
   onPlayContext,
+  onPlayWord,
   onReviewDecision,
   row,
 }: {
   onPlayContext: () => void;
+  onPlayWord: () => void;
   onReviewDecision: (decision: VocabularyReviewDecision) => void;
   row: LessonVocabularyRow;
 }) {
   const revealProgress = useRef(new Animated.Value(0)).current;
+  const singleTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPressRef = useRef(false);
   const translation = pickArmenianTranslationText(row.entry.translations) ?? '';
   const shouldReveal = shouldRevealVocabularyTranslation(row.localStage);
 
@@ -167,9 +179,48 @@ function VocabularyDictionaryRow({
     }
   }, [revealProgress, shouldReveal]);
 
+  useEffect(
+    () => () => {
+      if (singleTapTimerRef.current) {
+        clearTimeout(singleTapTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const handlePress = () => {
+    if (didLongPressRef.current) {
+      didLongPressRef.current = false;
+      return;
+    }
+
+    onPlayWord();
+    if (singleTapTimerRef.current) {
+      clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = null;
+      onReviewDecision('learned');
+      return;
+    }
+
+    singleTapTimerRef.current = setTimeout(() => {
+      singleTapTimerRef.current = null;
+      onReviewDecision('not_learned');
+    }, DOUBLE_TAP_DELAY_MS);
+  };
+
+  const handleLongPress = () => {
+    didLongPressRef.current = true;
+    if (singleTapTimerRef.current) {
+      clearTimeout(singleTapTimerRef.current);
+      singleTapTimerRef.current = null;
+    }
+    onPlayContext();
+  };
+
   return (
     <Pressable
-      onLongPress={onPlayContext}
+      onLongPress={handleLongPress}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.dictionaryRow,
         getStageStyle(row.localStage),
@@ -196,33 +247,8 @@ function VocabularyDictionaryRow({
           </Animated.Text>
         </View>
       </View>
-
-      <View style={styles.dictionaryActionsRow}>
-        <Pressable
-          onPress={() => onReviewDecision('not_learned')}
-          style={({ pressed }) => [
-            styles.dictionaryActionButton,
-            styles.dictionaryActionMissed,
-            pressed && styles.dictionaryActionPressed,
-          ]}>
-          <Text style={styles.dictionaryActionMissedText}>Not learned</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => onReviewDecision('learned')}
-          style={({ pressed }) => [
-            styles.dictionaryActionButton,
-            styles.dictionaryActionLearned,
-            pressed && styles.dictionaryActionPressed,
-          ]}>
-          <Text style={styles.dictionaryActionLearnedText}>{getLearnedButtonLabel(row.localStage)}</Text>
-        </Pressable>
-      </View>
     </Pressable>
   );
-}
-
-function getLearnedButtonLabel(stage?: VocabularyReviewStage) {
-  return stage ? 'Learned' : 'Learned once';
 }
 
 function buildHiddenTranslation(translation: string) {
