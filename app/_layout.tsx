@@ -6,6 +6,7 @@ import { SessionProvider } from '@/src/shared/auth/session-context';
 import { ErrorBoundary } from '@/src/shared/ui/error-boundary';
 import { FooterInsetProvider } from '@/src/shared/ui/footer-inset-context';
 import { GlobalFooter } from '@/src/shared/ui/global-footer';
+import { AppUpdateNotice } from '@/src/shared/ui/app-update-notice';
 
 export default function RootLayout() {
   return (
@@ -20,6 +21,7 @@ export default function RootLayout() {
               <Stack.Screen name="runner/[lessonId]" options={{ title: 'Task Runner' }} />
               <Stack.Screen name="results/[lessonId]" options={{ title: 'Lesson Results' }} />
             </Stack>
+            <AppUpdateNotice />
             <GlobalFooter />
             <StatusBar style="auto" />
           </FooterInsetProvider>

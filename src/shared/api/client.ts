@@ -7,6 +7,8 @@ import type {
   Lesson,
   LoginResponse,
   AppSettings,
+  AppPlatform,
+  AppVersionResponse,
   ProgressEvent,
   ResendVerificationResponse,
   SignupResponse,
@@ -219,6 +221,17 @@ export const apiClient = {
 
   getSettings(token: string) {
     return request<{ settings: AppSettings }>('/settings', {
+      method: 'GET',
+      token,
+    });
+  },
+
+  getAppVersion(token: string, platform: AppPlatform, buildNumber: number) {
+    const params = new URLSearchParams({
+      platform,
+      buildNumber: String(buildNumber),
+    });
+    return request<AppVersionResponse>(`/app-version?${params.toString()}`, {
       method: 'GET',
       token,
     });

@@ -178,3 +178,23 @@ export interface AppSettings {
   createdAt: string;
   updatedAt: string;
 }
+
+export type AppPlatform = 'android' | 'ios';
+
+export interface AppVersionPolicy {
+  platform: AppPlatform;
+  enabled: boolean;
+  latestBuildNumber: number;
+  minSupportedBuildNumber: number;
+  storeUrl: string;
+  message: string;
+}
+
+export interface AppVersionResponse {
+  currentBuildNumber: number;
+  policy: AppVersionPolicy;
+  update: {
+    available: boolean;
+    required: boolean;
+  };
+}
