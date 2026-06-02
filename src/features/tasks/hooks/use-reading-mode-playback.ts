@@ -3,6 +3,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { CONTIGUOUS_RANGE_TOLERANCE_MS } from '@/src/features/tasks/constants/task-runner';
 import {
   buildReadingModeScript,
+  getPulseDurationMs,
   resumePlaybackRanges,
   type PlaybackRange,
 } from '@/src/features/tasks/services/reading-mode-script';
@@ -15,6 +16,7 @@ type AudioPlayerStatus = ReturnType<typeof useAudioPlayerStatus>;
 export function useReadingModePlayback({
   currentItem,
   durationSeconds,
+  focusNormalizedByText,
   getSegmentIdAtMs,
   playableAudioUrl,
   player,
@@ -23,9 +25,11 @@ export function useReadingModePlayback({
   setNotice,
   triggerTranslationHeartbeat,
   unknownNormalizedWords,
+  wordRepetitionPauseMs,
 }: {
   currentItem: LessonItem | undefined;
   durationSeconds: number;
+  focusNormalizedByText: Record<string, string | undefined>;
   getSegmentIdAtMs: (positionMs: number) => string | null;
   playableAudioUrl: string | null;
   player: AudioPlayer;
@@ -34,6 +38,7 @@ export function useReadingModePlayback({
   setNotice: (notice: string | null) => void;
   triggerTranslationHeartbeat: (normalizedWord: string, durationMs: number) => void;
   unknownNormalizedWords: Set<string>;
+  wordRepetitionPauseMs: number;
 }) {
   const [activeModeId, setActiveModeId] = useState<ReadingModeId | null>(null);
   const modePlaybackRunIdRef = useRef(0);
@@ -107,7 +112,7 @@ export function useReadingModePlayback({
         if (range.pulseTargets?.length) {
           for (const target of range.pulseTargets) {
             const delayMs = Math.max(0, target.startMs - range.startMs);
-            const pulseDurationMs = Math.max(1, target.endMs - target.startMs);
+            const pulseDurationMs = getPulseDurationMs(range, target);
             const timer = setTimeout(() => {
               if (modePlaybackRunIdRef.current !== runId) return;
               triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
@@ -119,6 +124,11 @@ export function useReadingModePlayback({
         await wait(range.endMs - range.startMs);
         pulseTimers.forEach(clearTimeout);
         if (modePlaybackRunIdRef.current !== runId) return;
+        if (range.pauseAfterMs && range.pauseAfterMs > 0) {
+          player.pause();
+          await wait(range.pauseAfterMs);
+          if (modePlaybackRunIdRef.current !== runId) return;
+        }
         previousEndMs = range.endMs;
       }
       player.pause();
@@ -158,8 +168,10 @@ export function useReadingModePlayback({
           ? buildReadingModeScript({
               currentItem,
               durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
+              focusNormalizedByText,
               mode,
               unknownNormalizedWords,
+              wordRepetitionPauseMs,
             })
           : [];
         const resumeMs = Math.max(0, Math.round((playbackStatus.currentTime ?? 0) * 1000));
@@ -198,8 +210,10 @@ export function useReadingModePlayback({
         ? buildReadingModeScript({
             currentItem,
             durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
+            focusNormalizedByText,
             mode,
             unknownNormalizedWords,
+            wordRepetitionPauseMs,
           })
         : [];
 
@@ -216,6 +230,7 @@ export function useReadingModePlayback({
       activeModeId,
       currentItem,
       durationSeconds,
+      focusNormalizedByText,
       getModeDisabledReason,
       getSegmentIdAtMs,
       player,
@@ -225,6 +240,7 @@ export function useReadingModePlayback({
       scrollToSegment,
       setNotice,
       unknownNormalizedWords,
+      wordRepetitionPauseMs,
     ],
   );
 

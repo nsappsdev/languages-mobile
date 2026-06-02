@@ -1,5 +1,10 @@
 import { Animated, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { TOKEN_WORD_HORIZONTAL_PADDING } from '@/src/features/tasks/constants/task-runner';
 import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
+import {
+  getFocusedTokenLayout,
+  getStartAlignedTranslationOffset,
+} from '@/src/features/tasks/services/token-focus-layout';
 import {
   getTokenTranslationDisplay,
   shouldAllowVocabularyToggle,
@@ -125,17 +130,53 @@ export function TaskWordFlow({
         const tokenTranslation = getTokenTranslationDisplay(
           translationsForToken,
           revealTranslation,
+          renderedTokenText,
         );
         const measuredTokenWidth = match
-          ? renderedTokens.reduce((total, token) => total + (tokenWidths[token.key] ?? 0), 0)
+          ? tokenWidths[tokenKey] ?? 0
           : tokenWidths[tok.key] ?? 0;
+        const focusTokenIndex = match?.focusTokenIndex ?? null;
+        const focusLayout = match
+          ? getFocusedTokenLayout({
+              firstTokenIndex: match.startIndex,
+              focusTokenIndex,
+              fontSize: mainTextFontSize,
+              horizontalPadding: TOKEN_WORD_HORIZONTAL_PADDING,
+              measuredPhraseWidth: measuredTokenWidth,
+              tokenWidths,
+              tokens: renderedTokens,
+            })
+          : {
+              focusOffset: 0,
+              focusWidth: measuredTokenWidth,
+              phraseWidth: measuredTokenWidth,
+            };
+        const fallbackTokenWidth = Math.ceil(
+          renderedTokenText.length * mainTextFontSize * 0.56 + TOKEN_WORD_HORIZONTAL_PADDING * 2,
+        );
+        const availableTranslationWidth =
+          focusLayout.focusWidth || measuredTokenWidth || fallbackTokenWidth;
         const fittedTranslation = fitTranslationLabel({
           ...translationFitSettings,
-          availableWidth: measuredTokenWidth,
+          availableWidth: availableTranslationWidth,
           text: tokenTranslation.text,
         });
         const translationLineHeight = Math.ceil(fittedTranslation.fontSize + 3);
-        const pulseValue = getTokenPulseValue(normalizedWord);
+        const translationWidth =
+          fittedTranslation.containerWidth ?? availableTranslationWidth;
+        const translationOffset = match
+          ? getStartAlignedTranslationOffset({
+              focusOffset: focusLayout.focusOffset,
+            })
+          : 0;
+        const tokenLayoutWidth = Math.ceil(
+          Math.max(
+            focusLayout.phraseWidth || measuredTokenWidth || fallbackTokenWidth,
+            translationOffset + translationWidth,
+          ),
+        );
+        const pulseNormalizedWord = match?.focusNormalizedText ?? normalizedWord;
+        const pulseValue = getTokenPulseValue(pulseNormalizedWord);
         const pulseScale = pulseValue.interpolate({
           inputRange: [0, 0.5, 1],
           outputRange: [1, 1.08, 1],
@@ -157,7 +198,7 @@ export function TaskWordFlow({
               }
               if (
                 !shouldAllowVocabularyToggle(
-                  Boolean(vocabularyByText[normalizedWord]),
+                  Boolean(vocabularyByText[normalizedWord] || entry),
                   translationsForToken.some(
                     (translation) => ['am', 'hy'].includes(translation.languageCode.toLowerCase()),
                   ),
@@ -170,7 +211,12 @@ export function TaskWordFlow({
             }}
             disabled={isPlaying && segmentStartMs === null}
             style={styles.tokenWrapper}>
-            <View style={styles.tokenPulse}>
+            <View
+              style={[
+                styles.tokenPulse,
+                match && styles.tokenPulsePhrase,
+                { maxWidth: tokenLayoutWidth },
+              ]}>
               <Animated.Text
                 ellipsizeMode="clip"
                 numberOfLines={1}
@@ -182,14 +228,17 @@ export function TaskWordFlow({
                     height: translationLineHeight,
                     letterSpacing: fittedTranslation.letterSpacing,
                     lineHeight: translationLineHeight,
-                    minWidth: measuredTokenWidth || undefined,
-                    width: fittedTranslation.containerWidth,
+                    marginLeft: translationOffset,
+                    maxWidth: translationWidth,
                   },
                   {
                     opacity: pulseOpacity,
                     transform: [{ scale: pulseScale }],
                   },
                   !tokenTranslation.visible && styles.tokenTranslationHidden,
+                  tokenTranslation.visible &&
+                    !tokenTranslation.hasTranslation &&
+                    styles.tokenTranslationMissing,
                 ]}>
                 {tokenTranslation.text}
               </Animated.Text>
@@ -205,6 +254,9 @@ export function TaskWordFlow({
                   isActiveSegment && styles.tokenWordActive,
                   isSelected && styles.tokenWordSaved,
                   revealTranslation && !isSelected && styles.tokenWordUnknown,
+                  tokenTranslation.visible &&
+                    !tokenTranslation.hasTranslation &&
+                    styles.tokenWordUnknown,
                   isPending && styles.tokenWordPending,
                 ]}>
                 {renderedTokenText}

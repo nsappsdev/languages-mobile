@@ -28,6 +28,16 @@ export interface LessonItemSentenceTiming {
   order: number;
 }
 
+export interface LessonItemChunkTiming {
+  id: string;
+  text: string;
+  normalizedText: string;
+  startMs: number;
+  endMs: number;
+  wordMarkIds: string[];
+  order: number;
+}
+
 export interface LessonItem {
   id: string;
   lessonId: string;
@@ -37,6 +47,7 @@ export interface LessonItem {
   segments: LessonItemSegment[];
   wordTimings: LessonItemWordTiming[];
   sentenceTimings: LessonItemSentenceTiming[];
+  chunkTimings: LessonItemChunkTiming[];
 }
 
 export interface Lesson {
@@ -99,6 +110,8 @@ export interface VocabularyEntry {
   sourceItemId?: string | null;
   englishText: string;
   normalizedText?: string;
+  focusText?: string | null;
+  focusNormalizedText?: string | null;
   kind: VocabularyKind;
   order?: number;
   notes?: string | null;
@@ -175,6 +188,7 @@ export interface AppSettings {
   translationFontMaxSize: number;
   translationLetterSpacingMin: number;
   translationLetterSpacingMax: number;
+  wordRepetitionPauseMs: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -41,4 +41,15 @@ describe('fitTranslationLabel', () => {
     expect(fit.letterSpacing).toBe(-0.2);
     expect(fit.containerWidth).toBeGreaterThan(8);
   });
+
+  it('expands long Armenian translations so the full label remains visible', () => {
+    const fit = fitTranslationLabel({
+      ...settings,
+      availableWidth: 160,
+      text: 'անինքնավստահություններ',
+    });
+
+    expect(fit.containerWidth).toBeGreaterThanOrEqual(160);
+    expect(fit.fontSize).toBeLessThanOrEqual(settings.maxFontSize);
+  });
 });

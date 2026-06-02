@@ -122,13 +122,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       Animated.sequence([
         Animated.timing(pulseValue, {
           toValue: 1,
-          duration: 120,
+          duration: 220,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
+        Animated.delay(180),
         Animated.timing(pulseValue, {
           toValue: 0,
-          duration: 180,
+          duration: 300,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
@@ -140,20 +141,23 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const triggerTranslationHeartbeat = useCallback((normalizedWord: string, durationMs: number) => {
     const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
     tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
-    const halfDuration = Math.max(80, Math.min(Math.floor(durationMs / 2), 220));
+    const riseDuration = 260;
+    const fallDuration = 360;
+    const holdDuration = Math.max(500, Math.min(durationMs - riseDuration - fallDuration, 1000));
 
     pulseValue.stopAnimation(() => {
       pulseValue.setValue(0);
       Animated.sequence([
         Animated.timing(pulseValue, {
           toValue: 1,
-          duration: halfDuration,
+          duration: riseDuration,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
+        Animated.delay(holdDuration),
         Animated.timing(pulseValue, {
           toValue: 0,
-          duration: halfDuration,
+          duration: fallDuration,
           easing: Easing.in(Easing.quad),
           useNativeDriver: true,
         }),
@@ -396,10 +400,22 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return words;
   }, [unknownTaps, vocabularyByText]);
 
+  const focusNormalizedByText = useMemo(() => {
+    const focusByText: Record<string, string | undefined> = {};
+    for (const [normalizedText, item] of Object.entries(vocabularyByText)) {
+      focusByText[normalizedText] = item.entry.focusNormalizedText ?? undefined;
+    }
+    for (const [normalizedText, entry] of Object.entries(entryCacheByText)) {
+      focusByText[normalizedText] = entry.focusNormalizedText ?? focusByText[normalizedText];
+    }
+    return focusByText;
+  }, [entryCacheByText, vocabularyByText]);
+
   const { activeModeId, cancelModePlayback, getModeDisabledReason, handleToggleReadingMode } =
     useReadingModePlayback({
       currentItem,
       durationSeconds: playbackStatus.duration ?? 0,
+      focusNormalizedByText,
       getSegmentIdAtMs,
       playableAudioUrl,
       player,
@@ -408,6 +424,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       setNotice: setVocabularyNotice,
       triggerTranslationHeartbeat,
       unknownNormalizedWords,
+      wordRepetitionPauseMs: appSettings?.wordRepetitionPauseMs ?? 800,
     });
 
   useEffect(() => {

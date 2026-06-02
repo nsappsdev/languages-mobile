@@ -67,6 +67,7 @@ describe('task runner helpers', () => {
       id: 'entry-phrase',
       englishText: 'soap operas',
       normalizedText: 'soap operas',
+      focusNormalizedText: 'operas',
       kind: 'PHRASE',
       notes: null,
       tags: [],
@@ -88,6 +89,7 @@ describe('task runner helpers', () => {
     expect(matchedTokens).toEqual(['4:soap operas', '6:soap operas']);
     expect(matches[4]?.startIndex).toBe(4);
     expect(matches[4]?.endIndex).toBe(6);
+    expect(matches[4]?.focusTokenIndex).toBe(6);
   });
 
   it('does not turn sentence dictionary entries into one oversized token', () => {
