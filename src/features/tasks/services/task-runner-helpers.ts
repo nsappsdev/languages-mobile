@@ -9,6 +9,8 @@ import type { LessonWordToken } from '@/src/features/tasks/screens/task-runner-w
 
 export type VocabularyTokenMatch = {
   entry: VocabularyEntry;
+  focusNormalizedText: string | null;
+  focusTokenIndex: number | null;
   normalizedText: string;
   startIndex: number;
   endIndex: number;
@@ -75,6 +77,8 @@ export function buildVocabularyTokenMatches(
 
       const match: VocabularyTokenMatch = {
         entry: candidate.entry,
+        focusNormalizedText: candidate.entry.focusNormalizedText ?? null,
+        focusTokenIndex: getFocusTokenIndex(tokens, tokenIndices, candidate.entry.focusNormalizedText),
         normalizedText: candidate.normalized!,
         startIndex: tokenIndices[0],
         endIndex: tokenIndices[tokenIndices.length - 1],
@@ -88,6 +92,19 @@ export function buildVocabularyTokenMatches(
   }
 
   return matchesByToken;
+}
+
+function getFocusTokenIndex(
+  tokens: LessonWordToken[],
+  tokenIndices: number[],
+  focusNormalizedText?: string | null,
+) {
+  if (!focusNormalizedText) {
+    return null;
+  }
+  return (
+    tokenIndices.find((tokenIndex) => tokens[tokenIndex]?.normalized === focusNormalizedText) ?? null
+  );
 }
 
 function collectMatchingTokenIndices(

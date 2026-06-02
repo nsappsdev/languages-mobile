@@ -35,6 +35,7 @@ function createLesson(): Lesson {
             endMs: 1800,
           },
         ],
+        chunkTimings: [],
         sentenceTimings: [
           {
             id: 'sentence-1',

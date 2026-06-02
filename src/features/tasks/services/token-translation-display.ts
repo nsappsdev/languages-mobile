@@ -2,6 +2,7 @@ import type { VocabularyTranslation } from '@/src/types/domain';
 import { pickArmenianTranslationText } from '@/src/features/vocabulary/services/translation-display';
 
 export interface TokenTranslationDisplay {
+  hasTranslation: boolean;
   text: string;
   visible: boolean;
 }
@@ -23,14 +24,16 @@ export function shouldAllowVocabularyToggle(
 export function getTokenTranslationDisplay(
   translations: VocabularyTranslation[] | undefined,
   revealTranslation: boolean,
+  fallbackText = '—',
 ): TokenTranslationDisplay {
   if (!revealTranslation) {
-    return { text: ' ', visible: false };
+    return { hasTranslation: false, text: ' ', visible: false };
   }
 
   const translation = pickArmenianTranslationText(translations);
   return {
-    text: translation ?? '—',
+    hasTranslation: Boolean(translation),
+    text: translation ?? fallbackText,
     visible: true,
   };
 }

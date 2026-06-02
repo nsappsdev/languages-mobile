@@ -130,7 +130,9 @@ export const styles = StyleSheet.create({
   },
   tokenPulse: {
     alignItems: 'center',
-    maxWidth: '100%',
+  },
+  tokenPulsePhrase: {
+    alignItems: 'center',
   },
   tokenTranslation: {
     color: '#0f766e',
@@ -143,6 +145,9 @@ export const styles = StyleSheet.create({
   },
   tokenTranslationHidden: {
     opacity: 0,
+  },
+  tokenTranslationMissing: {
+    color: '#dc2626',
   },
   tokenWord: {
     borderRadius: radii.sm,

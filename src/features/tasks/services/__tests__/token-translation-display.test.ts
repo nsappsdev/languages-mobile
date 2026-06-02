@@ -18,7 +18,7 @@ describe('getTokenTranslationDisplay', () => {
       false,
     );
 
-    expect(result).toEqual({ text: ' ', visible: false });
+    expect(result).toEqual({ hasTranslation: false, text: ' ', visible: false });
   });
 
   it('reveals the Armenian translation after the word is marked unknown', () => {
@@ -35,13 +35,13 @@ describe('getTokenTranslationDisplay', () => {
       true,
     );
 
-    expect(result).toEqual({ text: 'բարև', visible: true });
+    expect(result).toEqual({ hasTranslation: true, text: 'բարև', visible: true });
   });
 
-  it('shows a dash when the word is marked unknown but has no translation yet', () => {
-    const result = getTokenTranslationDisplay([], true);
+  it('shows English fallback text when the word is marked unknown but has no translation yet', () => {
+    const result = getTokenTranslationDisplay([], true, 'never');
 
-    expect(result).toEqual({ text: '—', visible: true });
+    expect(result).toEqual({ hasTranslation: false, text: 'never', visible: true });
   });
 });
 
