@@ -71,6 +71,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const scrollViewRef = useRef<ScrollView | null>(null);
   const wordFlowOffsetYRef = useRef(0);
   const segmentLayoutsRef = useRef<Record<string, SegmentLayoutBounds>>({});
+  const pendingScrollSegmentIdRef = useRef<string | null>(null);
   const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
 
   const { appSettings, entryCacheByText, error, isLoading, lesson } = useTaskRunnerData({
@@ -122,15 +123,15 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       Animated.sequence([
         Animated.timing(pulseValue, {
           toValue: 1,
-          duration: 220,
-          easing: Easing.out(Easing.quad),
+          duration: 260,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(180),
+        Animated.delay(120),
         Animated.timing(pulseValue, {
           toValue: 0,
-          duration: 300,
-          easing: Easing.in(Easing.quad),
+          duration: 360,
+          easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start();
@@ -141,9 +142,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const triggerTranslationHeartbeat = useCallback((normalizedWord: string, durationMs: number) => {
     const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
     tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
-    const riseDuration = 260;
-    const fallDuration = 360;
-    const holdDuration = Math.max(500, Math.min(durationMs - riseDuration - fallDuration, 1000));
+    const riseDuration = 320;
+    const fallDuration = 520;
+    const holdDuration = Math.max(450, Math.min(durationMs - riseDuration - fallDuration, 1200));
 
     pulseValue.stopAnimation(() => {
       pulseValue.setValue(0);
@@ -151,14 +152,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
         Animated.timing(pulseValue, {
           toValue: 1,
           duration: riseDuration,
-          easing: Easing.out(Easing.quad),
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.delay(holdDuration),
         Animated.timing(pulseValue, {
           toValue: 0,
           duration: fallDuration,
-          easing: Easing.in(Easing.quad),
+          easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
       ]).start();
@@ -324,9 +325,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
       const segmentLayout = segmentLayoutsRef.current[segmentId];
       if (!segmentLayout) {
+        pendingScrollSegmentIdRef.current = segmentId;
         return;
       }
 
+      pendingScrollSegmentIdRef.current = null;
       scrollViewRef.current?.scrollTo({
         animated,
         y: calculateTopSegmentScrollOffset({
@@ -339,9 +342,15 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     [],
   );
 
-  const handleWordFlowLayout = useCallback((event: LayoutChangeEvent) => {
-    wordFlowOffsetYRef.current = event.nativeEvent.layout.y;
-  }, []);
+  const handleWordFlowLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      wordFlowOffsetYRef.current = event.nativeEvent.layout.y;
+      if (isPlaying) {
+        scrollToSegment(scrollTargetSegmentId);
+      }
+    },
+    [isPlaying, scrollTargetSegmentId, scrollToSegment],
+  );
 
   const handleTokenPositionLayout = useCallback(
     (segmentId: string | null, event: LayoutChangeEvent) => {
@@ -362,7 +371,10 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
             top: nextY,
           };
 
-      if (segmentId === scrollTargetSegmentId && isPlaying) {
+      if (
+        isPlaying &&
+        (segmentId === scrollTargetSegmentId || segmentId === pendingScrollSegmentIdRef.current)
+      ) {
         scrollToSegment(segmentId);
       }
     },
@@ -456,9 +468,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const handleTokenWordLayout = useCallback(
     (tokenKey: string, event: LayoutChangeEvent) => {
       const nextWidth = Math.ceil(event.nativeEvent.layout.width);
-      setTokenWidths((prev) =>
-        prev[tokenKey] === nextWidth ? prev : { ...prev, [tokenKey]: nextWidth },
-      );
+      setTokenWidths((prev) => {
+        if (prev[tokenKey] === nextWidth) {
+          return prev;
+        }
+
+        segmentLayoutsRef.current = {};
+        return { ...prev, [tokenKey]: nextWidth };
+      });
     },
     [],
   );

@@ -2,9 +2,10 @@ import { Animated, Pressable, Text, View, type LayoutChangeEvent } from 'react-n
 import { TOKEN_WORD_HORIZONTAL_PADDING } from '@/src/features/tasks/constants/task-runner';
 import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
 import {
+  getCenteredTranslationOffset,
   getFocusedTokenLayout,
-  getStartAlignedTranslationOffset,
 } from '@/src/features/tasks/services/token-focus-layout';
+import { getTokenLayoutWidth } from '@/src/features/tasks/services/task-word-flow-layout';
 import {
   getTokenTranslationDisplay,
   shouldAllowVocabularyToggle,
@@ -165,25 +166,26 @@ export function TaskWordFlow({
         const translationWidth =
           fittedTranslation.containerWidth ?? availableTranslationWidth;
         const translationOffset = match
-          ? getStartAlignedTranslationOffset({
+          ? getCenteredTranslationOffset({
               focusOffset: focusLayout.focusOffset,
+              focusWidth: focusLayout.focusWidth,
+              translationWidth,
             })
           : 0;
-        const tokenLayoutWidth = Math.ceil(
-          Math.max(
-            focusLayout.phraseWidth || measuredTokenWidth || fallbackTokenWidth,
-            translationOffset + translationWidth,
-          ),
-        );
+        const tokenLayoutWidth = getTokenLayoutWidth({
+          fallbackTokenWidth,
+          measuredTokenWidth,
+          phraseWidth: focusLayout.phraseWidth,
+        });
         const pulseNormalizedWord = match?.focusNormalizedText ?? normalizedWord;
         const pulseValue = getTokenPulseValue(pulseNormalizedWord);
         const pulseScale = pulseValue.interpolate({
           inputRange: [0, 0.5, 1],
-          outputRange: [1, 1.08, 1],
+          outputRange: [1, 1.04, 1],
         });
         const pulseOpacity = pulseValue.interpolate({
-          inputRange: [0, 1],
-          outputRange: [1, 0.98],
+          inputRange: [0, 0.5, 1],
+          outputRange: [0.96, 1, 0.96],
         });
 
         return (
@@ -215,7 +217,9 @@ export function TaskWordFlow({
               style={[
                 styles.tokenPulse,
                 match && styles.tokenPulsePhrase,
-                { maxWidth: tokenLayoutWidth },
+                {
+                  width: tokenLayoutWidth,
+                },
               ]}>
               <Animated.Text
                 ellipsizeMode="clip"
@@ -228,8 +232,9 @@ export function TaskWordFlow({
                     height: translationLineHeight,
                     letterSpacing: fittedTranslation.letterSpacing,
                     lineHeight: translationLineHeight,
+                    alignSelf: match ? 'flex-start' : 'center',
                     marginLeft: translationOffset,
-                    maxWidth: translationWidth,
+                    width: translationWidth,
                   },
                   {
                     opacity: pulseOpacity,

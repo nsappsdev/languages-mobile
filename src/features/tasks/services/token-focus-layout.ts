@@ -75,12 +75,16 @@ export function getFocusedTokenLayout({
   };
 }
 
-export function getStartAlignedTranslationOffset({
+export function getCenteredTranslationOffset({
   focusOffset,
+  focusWidth,
+  translationWidth,
 }: {
   focusOffset: number;
+  focusWidth: number;
+  translationWidth: number;
 }) {
-  return Math.max(0, focusOffset);
+  return Math.max(0, focusOffset + focusWidth / 2 - translationWidth / 2);
 }
 
 function estimatePhraseWidth(

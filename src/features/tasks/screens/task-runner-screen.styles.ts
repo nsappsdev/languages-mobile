@@ -124,12 +124,14 @@ export const styles = StyleSheet.create({
   },
   tokenWrapper: {
     alignItems: 'center',
-    flexShrink: 1,
+    flexShrink: 0,
     marginBottom: 4,
     maxWidth: '100%',
   },
   tokenPulse: {
     alignItems: 'center',
+    overflow: 'visible',
+    position: 'relative',
   },
   tokenPulsePhrase: {
     alignItems: 'center',
@@ -152,8 +154,6 @@ export const styles = StyleSheet.create({
   tokenWord: {
     borderRadius: radii.sm,
     color: text.primary,
-    flexShrink: 1,
-    flexWrap: 'wrap',
     fontSize: TOKEN_WORD_FONT_SIZE,
     lineHeight: TOKEN_WORD_LINE_HEIGHT,
     paddingHorizontal: TOKEN_WORD_HORIZONTAL_PADDING,

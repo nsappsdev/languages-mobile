@@ -1,6 +1,6 @@
 import {
+  getCenteredTranslationOffset,
   getFocusedTokenLayout,
-  getStartAlignedTranslationOffset,
 } from '../token-focus-layout';
 
 describe('token focus layout', () => {
@@ -22,16 +22,32 @@ describe('token focus layout', () => {
     expect(layout.focusOffset).toBeGreaterThan(75);
     expect(layout.focusWidth).toBeGreaterThan(95);
 
-    const offset = getStartAlignedTranslationOffset(layout);
+    const translationWidth = 48;
+    const offset = getCenteredTranslationOffset({
+      ...layout,
+      translationWidth,
+    });
 
-    expect(offset).toBe(layout.focusOffset);
+    expect(offset).toBe(layout.focusOffset + layout.focusWidth / 2 - translationWidth / 2);
   });
 
-  it('starts a wide translation at the focus token instead of centering it', () => {
+  it('centers a wide translation over the focus token', () => {
     expect(
-      getStartAlignedTranslationOffset({
+      getCenteredTranslationOffset({
         focusOffset: 140,
+        focusWidth: 40,
+        translationWidth: 120,
       }),
-    ).toBe(140);
+    ).toBe(100);
+  });
+
+  it('does not return a negative margin offset for labels wider than the token', () => {
+    expect(
+      getCenteredTranslationOffset({
+        focusOffset: 0,
+        focusWidth: 72,
+        translationWidth: 88,
+      }),
+    ).toBe(0);
   });
 });

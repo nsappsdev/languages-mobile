@@ -113,6 +113,11 @@ export function useReadingModePlayback({
           for (const target of range.pulseTargets) {
             const delayMs = Math.max(0, target.startMs - range.startMs);
             const pulseDurationMs = getPulseDurationMs(range, target);
+            if (delayMs <= CONTIGUOUS_RANGE_TOLERANCE_MS) {
+              triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
+              continue;
+            }
+
             const timer = setTimeout(() => {
               if (modePlaybackRunIdRef.current !== runId) return;
               triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
