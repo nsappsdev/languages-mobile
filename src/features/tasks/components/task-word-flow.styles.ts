@@ -29,16 +29,13 @@ export const wordFlowStyles = StyleSheet.create({
     overflow: 'visible',
     position: 'relative',
   },
-  tokenPulsePhrase: {
-    alignItems: 'center',
-  },
   tokenTranslation: {
     color: '#0f766e',
     fontSize: 10,
     fontWeight: fontWeight.bold,
-    height: 13,
     lineHeight: 13,
     marginBottom: 3,
+    minHeight: 13,
     textAlign: 'center',
   },
   tokenTranslationHidden: {
