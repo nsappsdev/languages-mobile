@@ -1,4 +1,4 @@
-import { Animated, Pressable, Text, View, type LayoutChangeEvent } from 'react-native';
+import { Animated, Pressable, Text, View } from 'react-native';
 import { TOKEN_WORD_HORIZONTAL_PADDING } from '@/src/features/tasks/constants/task-runner';
 import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
 import {
@@ -11,20 +11,12 @@ import {
   shouldAllowVocabularyToggle,
   shouldRevealTokenTranslation,
 } from '@/src/features/tasks/services/token-translation-display';
-import type { VocabularyTokenMatch } from '@/src/features/tasks/services/task-runner-helpers';
-import type { LessonWordToken } from '@/src/features/tasks/screens/task-runner-words';
-import { styles } from '@/src/features/tasks/screens/task-runner-screen.styles';
-import type { LearnerVocabularyItem, VocabularyEntry } from '@/src/types/domain';
-
-type TranslationFitSettings = {
-  maxFontSize: number;
-  maxLetterSpacing: number;
-  minFontSize: number;
-  minLetterSpacing: number;
-};
+import { wordFlowStyles } from '@/src/features/tasks/components/task-word-flow.styles';
+import type { TaskWordFlowProps } from '@/src/features/tasks/components/task-word-flow.types';
 
 export function TaskWordFlow({
   activeSegmentId,
+  activeWordTimingId,
   entryCacheByText,
   getTokenPulseValue,
   handleSeekToSegment,
@@ -40,6 +32,7 @@ export function TaskWordFlow({
   segmentStartById,
   tokenSegmentIds,
   tokenWidths,
+  tokenWordTimingIds,
   translationFitSettings,
   translationFontFamily,
   triggerTokenFeedback,
@@ -47,33 +40,9 @@ export function TaskWordFlow({
   vocabularyByText,
   vocabularyTokenMatches,
   wordTokens,
-}: {
-  activeSegmentId: string | null;
-  entryCacheByText: Record<string, VocabularyEntry>;
-  getTokenPulseValue: (normalizedWord: string) => Animated.Value;
-  handleSeekToSegment: (startMs: number | null) => void;
-  handleTokenPositionLayout: (segmentId: string | null, event: LayoutChangeEvent) => void;
-  handleTokenWordLayout: (tokenKey: string, event: LayoutChangeEvent) => void;
-  handleToggleWordVocabulary: (rawWord: string, normalizedWord: string | null) => void;
-  isPlaying: boolean;
-  mainTextFontFamily: string | undefined;
-  mainTextFontSize: number;
-  mainTextLineHeight: number;
-  onLayout: (event: LayoutChangeEvent) => void;
-  pendingWords: Record<string, true>;
-  segmentStartById: Record<string, number>;
-  tokenSegmentIds: (string | null)[];
-  tokenWidths: Record<string, number>;
-  translationFitSettings: TranslationFitSettings;
-  translationFontFamily: string | undefined;
-  triggerTokenFeedback: (normalizedWord: string) => void;
-  unknownTaps: Record<string, true>;
-  vocabularyByText: Record<string, LearnerVocabularyItem>;
-  vocabularyTokenMatches: (VocabularyTokenMatch | null)[];
-  wordTokens: LessonWordToken[];
-}) {
+}: TaskWordFlowProps) {
   return (
-    <View style={styles.wordFlow} onLayout={onLayout}>
+    <View style={wordFlowStyles.wordFlow} onLayout={onLayout}>
       {wordTokens.map((tok, idx) => {
         const coveringMatch = vocabularyTokenMatches.find(
           (match) => match && idx >= match.startIndex && idx <= match.endIndex,
@@ -90,23 +59,28 @@ export function TaskWordFlow({
         const segmentIdsInRange = match
           ? tokenSegmentIds.slice(match.startIndex, match.endIndex + 1)
           : [tokenSegmentIds[idx]];
+        const wordTimingIdsInRange = match
+          ? tokenWordTimingIds.slice(match.startIndex, match.endIndex + 1)
+          : [tokenWordTimingIds[idx]];
         const segmentId = segmentIdsInRange.find((value): value is string => Boolean(value)) ?? null;
         const isActiveSegment = segmentIdsInRange.some(
           (value) => value !== null && value === activeSegmentId,
         );
+        const isActiveWord =
+          activeWordTimingId !== null && wordTimingIdsInRange.includes(activeWordTimingId);
         const segmentStartMs = segmentId ? segmentStartById[segmentId] ?? null : null;
         if (!tok.normalized) {
           return (
             <Text
               key={tok.key}
               style={[
-                styles.wordWhitespace,
+                wordFlowStyles.wordWhitespace,
                 {
                   fontFamily: mainTextFontFamily,
                   fontSize: mainTextFontSize,
                   lineHeight: mainTextLineHeight,
                 },
-                isActiveSegment && styles.tokenWordActive,
+                isActiveSegment && wordFlowStyles.tokenWordActive,
               ]}>
               {tok.text}
             </Text>
@@ -212,11 +186,11 @@ export function TaskWordFlow({
               handleToggleWordVocabulary(renderedTokenText, normalizedWord);
             }}
             disabled={isPlaying && segmentStartMs === null}
-            style={styles.tokenWrapper}>
+            style={wordFlowStyles.tokenWrapper}>
             <View
               style={[
-                styles.tokenPulse,
-                match && styles.tokenPulsePhrase,
+                wordFlowStyles.tokenPulse,
+                match && wordFlowStyles.tokenPulsePhrase,
                 {
                   width: tokenLayoutWidth,
                 },
@@ -225,7 +199,7 @@ export function TaskWordFlow({
                 ellipsizeMode="clip"
                 numberOfLines={1}
                 style={[
-                  styles.tokenTranslation,
+                  wordFlowStyles.tokenTranslation,
                   {
                     fontFamily: translationFontFamily,
                     fontSize: fittedTranslation.fontSize,
@@ -240,29 +214,30 @@ export function TaskWordFlow({
                     opacity: pulseOpacity,
                     transform: [{ scale: pulseScale }],
                   },
-                  !tokenTranslation.visible && styles.tokenTranslationHidden,
+                  !tokenTranslation.visible && wordFlowStyles.tokenTranslationHidden,
                   tokenTranslation.visible &&
                     !tokenTranslation.hasTranslation &&
-                    styles.tokenTranslationMissing,
+                    wordFlowStyles.tokenTranslationMissing,
                 ]}>
                 {tokenTranslation.text}
               </Animated.Text>
               <Text
                 onLayout={(event) => handleTokenWordLayout(tokenKey, event)}
                 style={[
-                  styles.tokenWord,
+                  wordFlowStyles.tokenWord,
                   {
                     fontFamily: mainTextFontFamily,
                     fontSize: mainTextFontSize,
                     lineHeight: mainTextLineHeight,
                   },
-                  isActiveSegment && styles.tokenWordActive,
-                  isSelected && styles.tokenWordSaved,
-                  revealTranslation && !isSelected && styles.tokenWordUnknown,
+                  isActiveSegment && wordFlowStyles.tokenWordActive,
+                  isActiveWord && wordFlowStyles.tokenWordSpeaking,
+                  isSelected && wordFlowStyles.tokenWordSaved,
+                  revealTranslation && !isSelected && wordFlowStyles.tokenWordUnknown,
                   tokenTranslation.visible &&
                     !tokenTranslation.hasTranslation &&
-                    styles.tokenWordUnknown,
-                  isPending && styles.tokenWordPending,
+                    wordFlowStyles.tokenWordUnknown,
+                  isPending && wordFlowStyles.tokenWordPending,
                 ]}>
                 {renderedTokenText}
               </Text>

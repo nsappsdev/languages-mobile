@@ -70,6 +70,28 @@ describe('buildReadingModeScript', () => {
     ]);
   });
 
+  it('includes earlier unknown word repetitions when resuming from an earlier sentence start', () => {
+    const ranges = buildReadingModeScript({
+      currentItem: baseItem,
+      durationMs: 2500,
+      mode: teachingMode,
+      unknownNormalizedWords: new Set(['beach']),
+      wordRepetitionPauseMs: 800,
+    });
+
+    expect(
+      resumePlaybackRanges({
+        ranges,
+        resumeMs: 0,
+      }).ranges,
+    ).toContainEqual({
+      startMs: 1800,
+      endMs: 2200,
+      pauseAfterMs: 800,
+      pulseTargets: [{ normalizedWord: 'beach', startMs: 1800, endMs: 2200 }],
+    });
+  });
+
   it('targets each token translation when an unknown phrase repeats', () => {
     const phraseItem: LessonItem = {
       ...baseItem,
@@ -305,6 +327,36 @@ describe('resumePlaybackRanges', () => {
       startIndex: 2,
       ranges: [
         { startMs: 1200, endMs: 1500 },
+        { startMs: 1500, endMs: 2200 },
+      ],
+    });
+  });
+
+  it('restarts a paused repeated word range so the translation pulses again', () => {
+    const ranges = [
+      { startMs: 0, endMs: 1000 },
+      {
+        startMs: 1000,
+        endMs: 1500,
+        pulseTargets: [{ normalizedWord: 'beach', startMs: 1000, endMs: 1500 }],
+      },
+      { startMs: 1500, endMs: 2200 },
+    ];
+
+    expect(
+      resumePlaybackRanges({
+        preferredRangeIndex: 1,
+        ranges,
+        resumeMs: 1300,
+      }),
+    ).toEqual({
+      startIndex: 1,
+      ranges: [
+        {
+          startMs: 1000,
+          endMs: 1500,
+          pulseTargets: [{ normalizedWord: 'beach', startMs: 1000, endMs: 1500 }],
+        },
         { startMs: 1500, endMs: 2200 },
       ],
     });

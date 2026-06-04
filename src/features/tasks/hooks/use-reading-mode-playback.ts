@@ -3,10 +3,10 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { CONTIGUOUS_RANGE_TOLERANCE_MS } from '@/src/features/tasks/constants/task-runner';
 import {
   buildReadingModeScript,
-  getPulseDurationMs,
   resumePlaybackRanges,
   type PlaybackRange,
 } from '@/src/features/tasks/services/reading-mode-script';
+import { buildPulseSchedule } from '@/src/features/tasks/services/reading-mode-playback-schedule';
 import { wait } from '@/src/features/tasks/services/task-runner-helpers';
 import type { LessonItem, ReadingModeId, ReadingModeSettings } from '@/src/types/domain';
 
@@ -46,6 +46,7 @@ export function useReadingModePlayback({
     modeId: ReadingModeId;
     rangeIndex: number;
   } | null>(null);
+  const activeModeSettingsRef = useRef<ReadingModeSettings | null>(null);
 
   const cancelModePlayback = useCallback(
     ({ pause = true }: { pause?: boolean } = {}) => {
@@ -55,6 +56,7 @@ export function useReadingModePlayback({
       }
       setActiveModeId(null);
       modePlaybackProgressRef.current = null;
+      activeModeSettingsRef.current = null;
     },
     [player],
   );
@@ -109,21 +111,17 @@ export function useReadingModePlayback({
         }
         if (modePlaybackRunIdRef.current !== runId) return;
         const pulseTimers: ReturnType<typeof setTimeout>[] = [];
-        if (range.pulseTargets?.length) {
-          for (const target of range.pulseTargets) {
-            const delayMs = Math.max(0, target.startMs - range.startMs);
-            const pulseDurationMs = getPulseDurationMs(range, target);
-            if (delayMs <= CONTIGUOUS_RANGE_TOLERANCE_MS) {
-              triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
-              continue;
-            }
-
-            const timer = setTimeout(() => {
-              if (modePlaybackRunIdRef.current !== runId) return;
-              triggerTranslationHeartbeat(target.normalizedWord, pulseDurationMs);
-            }, delayMs);
-            pulseTimers.push(timer);
+        for (const pulse of buildPulseSchedule(range)) {
+          if (pulse.immediate) {
+            triggerTranslationHeartbeat(pulse.target.normalizedWord, pulse.durationMs);
+            continue;
           }
+
+          const timer = setTimeout(() => {
+            if (modePlaybackRunIdRef.current !== runId) return;
+            triggerTranslationHeartbeat(pulse.target.normalizedWord, pulse.durationMs);
+          }, pulse.delayMs);
+          pulseTimers.push(timer);
         }
         player.play();
         await wait(range.endMs - range.startMs);
@@ -140,6 +138,7 @@ export function useReadingModePlayback({
       if (modePlaybackRunIdRef.current === runId) {
         setActiveModeId(null);
         modePlaybackProgressRef.current = null;
+        activeModeSettingsRef.current = null;
       }
     },
     [getSegmentIdAtMs, player, scrollToSegment, triggerTranslationHeartbeat],
@@ -163,6 +162,7 @@ export function useReadingModePlayback({
 
       if (activeModeId === mode.id && !playbackStatus.playing) {
         setNotice(null);
+        activeModeSettingsRef.current = mode;
 
         if (mode.id === 'introduction') {
           player.play();
@@ -200,6 +200,7 @@ export function useReadingModePlayback({
 
       setNotice(null);
       setActiveModeId(mode.id);
+      activeModeSettingsRef.current = mode;
       modePlaybackProgressRef.current = null;
 
       if (mode.id === 'introduction') {
@@ -225,6 +226,7 @@ export function useReadingModePlayback({
       if (!ranges.length) {
         setNotice('This mode needs timing ranges before it can play.');
         setActiveModeId(null);
+        activeModeSettingsRef.current = null;
         return;
       }
 
@@ -249,10 +251,70 @@ export function useReadingModePlayback({
     ],
   );
 
+  const seekActiveModeToMs = useCallback(
+    (positionMs: number) => {
+      const mode = activeModeSettingsRef.current;
+      if (!mode || !currentItem) {
+        return false;
+      }
+
+      modePlaybackRunIdRef.current += 1;
+      const runId = modePlaybackRunIdRef.current;
+      setNotice(null);
+      setActiveModeId(mode.id);
+
+      if (mode.id === 'introduction') {
+        scrollToSegment(getSegmentIdAtMs(positionMs), false);
+        void player.seekTo(positionMs / 1000).then(() => {
+          if (modePlaybackRunIdRef.current !== runId) return;
+          player.play();
+        });
+        return true;
+      }
+
+      const ranges = buildReadingModeScript({
+        currentItem,
+        durationMs: Math.max(0, Math.round(durationSeconds * 1000)),
+        focusNormalizedByText,
+        mode,
+        unknownNormalizedWords,
+        wordRepetitionPauseMs,
+      });
+      const resumed = resumePlaybackRanges({
+        ranges,
+        resumeMs: Math.max(0, positionMs),
+      });
+
+      if (!resumed.ranges.length) {
+        setActiveModeId(null);
+        modePlaybackProgressRef.current = null;
+        activeModeSettingsRef.current = null;
+        return false;
+      }
+
+      scrollToSegment(getSegmentIdAtMs(resumed.ranges[0].startMs), false);
+      void runRangeScript(mode.id, resumed.ranges, runId, resumed.startIndex);
+      return true;
+    },
+    [
+      currentItem,
+      durationSeconds,
+      focusNormalizedByText,
+      getSegmentIdAtMs,
+      player,
+      runRangeScript,
+      scrollToSegment,
+      setNotice,
+      unknownNormalizedWords,
+      wordRepetitionPauseMs,
+    ],
+  );
+
   return {
     activeModeId,
     cancelModePlayback,
     getModeDisabledReason,
     handleToggleReadingMode,
+    seekActiveModeToMs,
   };
 }

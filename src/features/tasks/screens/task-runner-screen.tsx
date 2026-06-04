@@ -43,6 +43,10 @@ import {
 } from '@/src/features/tasks/services/task-runner-helpers';
 import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
 import { getTokenSegmentIds } from '@/src/features/tasks/screens/task-runner-segments';
+import {
+  getActiveWordTimingId,
+  getTokenWordTimingIds,
+} from '@/src/features/tasks/screens/task-runner-word-timings';
 import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
@@ -252,6 +256,15 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return activeSegment?.id ?? null;
   }, [currentItem, playbackStatus.currentTime]);
 
+  const activeWordTimingId = useMemo(() => {
+    if (!currentItem) {
+      return null;
+    }
+
+    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
+    return getActiveWordTimingId(currentItem.wordTimings ?? [], currentPositionMs);
+  }, [currentItem, playbackStatus.currentTime]);
+
   const scrollTargetSegmentId = useMemo(() => {
     if (!currentItem || !isPlaying) {
       return activeSegmentId;
@@ -275,6 +288,13 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       return wordTokens.map(() => null);
     }
     return getTokenSegmentIds(wordTokens, currentItem.text, currentItem.segments);
+  }, [currentItem, wordTokens]);
+
+  const tokenWordTimingIds = useMemo((): (string | null)[] => {
+    if (!currentItem || !currentItem.wordTimings.length) {
+      return wordTokens.map(() => null);
+    }
+    return getTokenWordTimingIds(wordTokens, currentItem.text, currentItem.wordTimings);
   }, [currentItem, wordTokens]);
 
   const vocabularyTokenMatches = useMemo(
@@ -423,8 +443,13 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return focusByText;
   }, [entryCacheByText, vocabularyByText]);
 
-  const { activeModeId, cancelModePlayback, getModeDisabledReason, handleToggleReadingMode } =
-    useReadingModePlayback({
+  const {
+    activeModeId,
+    cancelModePlayback,
+    getModeDisabledReason,
+    handleToggleReadingMode,
+    seekActiveModeToMs,
+  } = useReadingModePlayback({
       currentItem,
       durationSeconds: playbackStatus.duration ?? 0,
       focusNormalizedByText,
@@ -483,11 +508,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const handleSeekToSegment = useCallback(
     (startMs: number | null) => {
       if (!isPlaying || startMs === null) return;
+      if (activeModeId && seekActiveModeToMs(startMs)) {
+        return;
+      }
       const startSeconds = startMs / 1000;
       scrollToSegment(getSegmentIdAtMs(startMs), false);
       void player.seekTo(startSeconds);
     },
-    [getSegmentIdAtMs, isPlaying, player, scrollToSegment],
+    [activeModeId, getSegmentIdAtMs, isPlaying, player, scrollToSegment, seekActiveModeToMs],
   );
 
   const completeCurrentItem = useCallback(() => {
@@ -643,6 +671,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
             <TaskWordFlow
               activeSegmentId={activeSegmentId}
+              activeWordTimingId={activeWordTimingId}
               entryCacheByText={entryCacheByText}
               getTokenPulseValue={getTokenPulseValue}
               handleSeekToSegment={handleSeekToSegment}
@@ -658,6 +687,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               segmentStartById={segmentStartById}
               tokenSegmentIds={tokenSegmentIds}
               tokenWidths={tokenWidths}
+              tokenWordTimingIds={tokenWordTimingIds}
               translationFitSettings={translationFitSettings}
               translationFontFamily={translationFontFamily}
               triggerTokenFeedback={triggerTokenFeedback}

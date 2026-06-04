@@ -133,11 +133,12 @@ export function resumePlaybackRanges({
   const resumedRanges = ranges.slice(startIndex);
   const firstRange = resumedRanges[0];
   if (resumeMs > firstRange.startMs && resumeMs < firstRange.endMs) {
-    resumedRanges[0] = {
-      ...firstRange,
-      startMs: resumeMs,
-      pulseTargets: firstRange.pulseTargets?.filter((target) => target.endMs > resumeMs),
-    };
+    if (!firstRange.pulseTargets?.length) {
+      resumedRanges[0] = {
+        ...firstRange,
+        startMs: resumeMs,
+      };
+    }
   }
 
   return {
