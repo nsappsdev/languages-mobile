@@ -1,17 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer } from 'expo-audio';
 import { CONTIGUOUS_RANGE_TOLERANCE_MS } from '@/src/features/tasks/constants/task-runner';
 import {
   buildReadingModeScript,
   resumePlaybackRanges,
   type PlaybackRange,
 } from '@/src/features/tasks/services/reading-mode-script';
+import {
+  playUntilPosition,
+  seekToVerifiedPosition,
+  traceReadingModePlayback,
+  type PositionAwarePlayer,
+} from '@/src/features/tasks/services/reading-mode-player';
 import { buildPulseSchedule } from '@/src/features/tasks/services/reading-mode-playback-schedule';
 import { wait } from '@/src/features/tasks/services/task-runner-helpers';
 import type { LessonItem, ReadingModeId, ReadingModeSettings } from '@/src/types/domain';
 
 type AudioPlayer = ReturnType<typeof useAudioPlayer>;
-type AudioPlayerStatus = ReturnType<typeof useAudioPlayerStatus>;
+type AudioPlayerStatus = {
+  currentTime: number;
+  didJustFinish: boolean;
+  duration: number;
+  playing: boolean;
+};
 
 export function useReadingModePlayback({
   currentItem,
@@ -44,7 +55,7 @@ export function useReadingModePlayback({
   const modePlaybackRunIdRef = useRef(0);
   const modePlaybackProgressRef = useRef<{
     modeId: ReadingModeId;
-    rangeIndex: number;
+    stepId: string;
   } | null>(null);
   const activeModeSettingsRef = useRef<ReadingModeSettings | null>(null);
 
@@ -91,7 +102,6 @@ export function useReadingModePlayback({
       modeId: ReadingModeId,
       ranges: PlaybackRange[],
       runId: number,
-      baseRangeIndex = 0,
     ) => {
       let previousEndMs: number | null = null;
       for (let rangeOffset = 0; rangeOffset < ranges.length; rangeOffset += 1) {
@@ -99,15 +109,40 @@ export function useReadingModePlayback({
         if (modePlaybackRunIdRef.current !== runId) return;
         modePlaybackProgressRef.current = {
           modeId,
-          rangeIndex: baseRangeIndex + rangeOffset,
+          stepId: range.id,
         };
+        traceReadingModePlayback('step-start', {
+          actualPositionMs: Math.round(player.currentStatus.currentTime * 1000),
+          endMs: range.endMs,
+          kind: range.kind,
+          modeId,
+          startMs: range.startMs,
+          stepId: range.id,
+        });
         scrollToSegment(getSegmentIdAtMs(range.startMs));
+        const positionMs = player.currentStatus.currentTime * 1000;
         const canContinueFromPrevious =
           previousEndMs !== null &&
-          Math.abs(previousEndMs - range.startMs) <= CONTIGUOUS_RANGE_TOLERANCE_MS;
+          Math.abs(previousEndMs - range.startMs) <= CONTIGUOUS_RANGE_TOLERANCE_MS &&
+          Math.abs(positionMs - range.startMs) <= CONTIGUOUS_RANGE_TOLERANCE_MS;
         if (!canContinueFromPrevious) {
-          player.pause();
-          await player.seekTo(range.startMs / 1000, 0, 0);
+          const positioned = await seekToVerifiedPosition({
+            isCancelled: () => modePlaybackRunIdRef.current !== runId,
+            player: player as PositionAwarePlayer,
+            positionMs: range.startMs,
+          });
+          if (!positioned) {
+            traceReadingModePlayback('seek-failed', {
+              actualPositionMs: Math.round(player.currentStatus.currentTime * 1000),
+              requestedPositionMs: range.startMs,
+              stepId: range.id,
+            });
+            if (modePlaybackRunIdRef.current === runId) {
+              setNotice('Audio could not reach the requested timing. Please retry.');
+              cancelModePlayback();
+            }
+            return;
+          }
         }
         if (modePlaybackRunIdRef.current !== runId) return;
         const pulseTimers: ReturnType<typeof setTimeout>[] = [];
@@ -123,12 +158,29 @@ export function useReadingModePlayback({
           }, pulse.delayMs);
           pulseTimers.push(timer);
         }
-        player.play();
-        await wait(range.endMs - range.startMs);
+        const reachedEnd = await playUntilPosition({
+          endMs: range.endMs,
+          isCancelled: () => modePlaybackRunIdRef.current !== runId,
+          player: player as PositionAwarePlayer,
+        });
         pulseTimers.forEach(clearTimeout);
         if (modePlaybackRunIdRef.current !== runId) return;
+        if (!reachedEnd) {
+          traceReadingModePlayback('range-failed', {
+            actualPositionMs: Math.round(player.currentStatus.currentTime * 1000),
+            expectedEndMs: range.endMs,
+            stepId: range.id,
+          });
+          setNotice('Audio playback did not reach the expected timing. Please retry.');
+          cancelModePlayback();
+          return;
+        }
+        traceReadingModePlayback('range-end', {
+          actualPositionMs: Math.round(player.currentStatus.currentTime * 1000),
+          expectedEndMs: range.endMs,
+          stepId: range.id,
+        });
         if (range.pauseAfterMs && range.pauseAfterMs > 0) {
-          player.pause();
           await wait(range.pauseAfterMs);
           if (modePlaybackRunIdRef.current !== runId) return;
         }
@@ -141,7 +193,14 @@ export function useReadingModePlayback({
         activeModeSettingsRef.current = null;
       }
     },
-    [getSegmentIdAtMs, player, scrollToSegment, triggerTranslationHeartbeat],
+    [
+      cancelModePlayback,
+      getSegmentIdAtMs,
+      player,
+      scrollToSegment,
+      setNotice,
+      triggerTranslationHeartbeat,
+    ],
   );
 
   const handleToggleReadingMode = useCallback(
@@ -179,10 +238,10 @@ export function useReadingModePlayback({
               wordRepetitionPauseMs,
             })
           : [];
-        const resumeMs = Math.max(0, Math.round((playbackStatus.currentTime ?? 0) * 1000));
+        const resumeMs = Math.max(0, Math.round(player.currentStatus.currentTime * 1000));
         const progress = modePlaybackProgressRef.current;
         const resumed = resumePlaybackRanges({
-          preferredRangeIndex: progress?.modeId === mode.id ? progress.rangeIndex : null,
+          preferredStepId: progress?.modeId === mode.id ? progress.stepId : null,
           ranges,
           resumeMs,
         });
@@ -194,7 +253,7 @@ export function useReadingModePlayback({
         }
 
         scrollToSegment(getSegmentIdAtMs(resumed.ranges[0].startMs), false);
-        void runRangeScript(mode.id, resumed.ranges, runId, resumed.startIndex);
+        void runRangeScript(mode.id, resumed.ranges, runId);
         return;
       }
 
@@ -241,7 +300,6 @@ export function useReadingModePlayback({
       getModeDisabledReason,
       getSegmentIdAtMs,
       player,
-      playbackStatus.currentTime,
       playbackStatus.playing,
       runRangeScript,
       scrollToSegment,
@@ -293,7 +351,7 @@ export function useReadingModePlayback({
       }
 
       scrollToSegment(getSegmentIdAtMs(resumed.ranges[0].startMs), false);
-      void runRangeScript(mode.id, resumed.ranges, runId, resumed.startIndex);
+      void runRangeScript(mode.id, resumed.ranges, runId);
       return true;
     },
     [

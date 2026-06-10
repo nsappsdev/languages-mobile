@@ -2,8 +2,17 @@ import {
   buildReadingModeScript,
   getPulseDurationMs,
   resumePlaybackRanges,
+  type PlaybackRange,
 } from '../reading-mode-script';
 import type { LessonItem, ReadingModeSettings } from '@/src/types/domain';
+
+const teachingMode: ReadingModeSettings = {
+  id: 'teaching',
+  enabled: true,
+  displayName: 'Teaching',
+  order: 1,
+  unknownWordRepetitions: 3,
+};
 
 const baseItem: LessonItem = {
   id: 'item-1',
@@ -14,31 +23,16 @@ const baseItem: LessonItem = {
   segments: [{ id: 's1', text: 'We went to the beach.', startMs: 0, endMs: 2500 }],
   chunkTimings: [],
   wordTimings: [
-    { id: 'w1', text: 'We', normalizedText: 'we', startMs: 0, endMs: 250, order: 0 },
-    { id: 'w2', text: 'beach', normalizedText: 'beach', startMs: 1800, endMs: 2200, order: 1 },
+    { id: 'we', text: 'We', normalizedText: 'we', startMs: 0, endMs: 250, order: 0 },
+    { id: 'beach', text: 'beach', normalizedText: 'beach', startMs: 1800, endMs: 2200, order: 1 },
   ],
   sentenceTimings: [
-    {
-      id: 's1',
-      text: 'We went to the beach.',
-      startMs: 0,
-      endMs: 2500,
-      wordMarkIds: ['w1', 'w2'],
-      order: 0,
-    },
+    { id: 's1', text: 'We went to the beach.', startMs: 0, endMs: 2500, wordMarkIds: ['we', 'beach'], order: 0 },
   ],
-};
-
-const teachingMode: ReadingModeSettings = {
-  id: 'teaching',
-  enabled: true,
-  displayName: 'Teaching',
-  order: 1,
-  unknownWordRepetitions: 3,
 };
 
 describe('buildReadingModeScript', () => {
-  it('plays the unknown word once naturally before seeking back for configured repeats', () => {
+  it('builds stable teaching steps with the configured total word plays', () => {
     const ranges = buildReadingModeScript({
       currentItem: baseItem,
       durationMs: 2500,
@@ -47,369 +41,142 @@ describe('buildReadingModeScript', () => {
       wordRepetitionPauseMs: 800,
     });
 
-    expect(ranges).toEqual([
-      { startMs: 0, endMs: 1800 },
-      {
-        startMs: 1800,
-        endMs: 2200,
-        pauseAfterMs: 800,
-        pulseTargets: [{ normalizedWord: 'beach', startMs: 1800, endMs: 2200 }],
-      },
-      {
-        startMs: 1800,
-        endMs: 2200,
-        pauseAfterMs: 800,
-        pulseTargets: [{ normalizedWord: 'beach', startMs: 1800, endMs: 2200 }],
-      },
-      {
-        startMs: 1800,
-        endMs: 2200,
-        pulseTargets: [{ normalizedWord: 'beach', startMs: 1800, endMs: 2200 }],
-      },
-      { startMs: 2200, endMs: 2500 },
+    expect(ranges.map(({ id, kind, startMs, endMs, pauseAfterMs }) => ({ id, kind, startMs, endMs, pauseAfterMs }))).toEqual([
+      { id: 'continuous:0:1800', kind: 'continuous', startMs: 0, endMs: 1800, pauseAfterMs: undefined },
+      { id: 'word:beach:1', kind: 'word_repeat', startMs: 1800, endMs: 2200, pauseAfterMs: 800 },
+      { id: 'word:beach:2', kind: 'word_repeat', startMs: 1800, endMs: 2200, pauseAfterMs: 800 },
+      { id: 'word:beach:3', kind: 'word_repeat', startMs: 1800, endMs: 2200, pauseAfterMs: undefined },
+      { id: 'continuous:2200:2500', kind: 'continuous', startMs: 2200, endMs: 2500, pauseAfterMs: undefined },
     ]);
   });
 
-  it('includes earlier unknown word repetitions when resuming from an earlier sentence start', () => {
-    const ranges = buildReadingModeScript({
-      currentItem: baseItem,
-      durationMs: 2500,
-      mode: teachingMode,
-      unknownNormalizedWords: new Set(['beach']),
-      wordRepetitionPauseMs: 800,
-    });
-
-    expect(
-      resumePlaybackRanges({
-        ranges,
-        resumeMs: 0,
-      }).ranges,
-    ).toContainEqual({
-      startMs: 1800,
-      endMs: 2200,
-      pauseAfterMs: 800,
-      pulseTargets: [{ normalizedWord: 'beach', startMs: 1800, endMs: 2200 }],
-    });
-  });
-
-  it('targets each token translation when an unknown phrase repeats', () => {
-    const phraseItem: LessonItem = {
-      ...baseItem,
-      text: 'We ate ice cream.',
-      segments: [{ id: 's1', text: 'We ate ice cream.', startMs: 0, endMs: 1800 }],
-      chunkTimings: [
-        {
-          id: 'chunk-1',
-          text: 'ice cream',
-          normalizedText: 'ice cream',
-          startMs: 900,
-          endMs: 1500,
-          wordMarkIds: ['ice', 'cream'],
-          order: 0,
-        },
-      ],
-      wordTimings: [
-        {
-          id: 'ice',
-          text: 'ice',
-          normalizedText: 'ice',
-          startMs: 900,
-          endMs: 1125,
-          order: 0,
-        },
-        {
-          id: 'cream',
-          text: 'cream',
-          normalizedText: 'cream',
-          startMs: 1125,
-          endMs: 1500,
-          order: 1,
-        },
-      ],
-      sentenceTimings: [
-        {
-          id: 's1',
-          text: 'We ate ice cream.',
-          startMs: 0,
-          endMs: 1800,
-          wordMarkIds: ['ice', 'cream'],
-          order: 0,
-        },
-      ],
-    };
-
-    const ranges = buildReadingModeScript({
-      currentItem: phraseItem,
-      durationMs: 1800,
-      focusNormalizedByText: { 'ice cream': 'cream' },
-      mode: { ...teachingMode, unknownWordRepetitions: 2 },
-      unknownNormalizedWords: new Set(['ice cream']),
-      wordRepetitionPauseMs: 1000,
-    });
-
-    expect(ranges).toEqual([
-      { startMs: 0, endMs: 900 },
-      {
-        startMs: 900,
-        endMs: 1500,
-        pauseAfterMs: 1000,
-        pulseTargets: [{ normalizedWord: 'cream', startMs: 1125, endMs: 1500 }],
-      },
-      {
-        startMs: 900,
-        endMs: 1500,
-        pulseTargets: [{ normalizedWord: 'cream', startMs: 1125, endMs: 1500 }],
-      },
-      { startMs: 1500, endMs: 1800 },
-    ]);
-  });
-
-  it('repeats a saved phrase from child word timings when no exact logical chunk exists', () => {
-    const phraseItem: LessonItem = {
+  it('derives phrases from word timings and ignores stale logical chunks', () => {
+    const item: LessonItem = {
       ...baseItem,
       text: 'They naturally stir up attention.',
-      segments: [{ id: 's1', text: 'They naturally stir up attention.', startMs: 0, endMs: 2600 }],
-      chunkTimings: [],
+      segments: [{ id: 's1', text: 'They naturally stir up attention.', startMs: 0, endMs: 2000 }],
+      chunkTimings: [{ id: 'old', text: 'naturally stir up', normalizedText: 'naturally stir up', startMs: 450, endMs: 1400, wordMarkIds: ['old-1'], order: 0 }],
       wordTimings: [
-        {
-          id: 'naturally',
-          text: 'naturally',
-          normalizedText: 'naturally',
-          startMs: 500,
-          endMs: 900,
-          order: 0,
-        },
-        {
-          id: 'stir',
-          text: 'stir',
-          normalizedText: 'stir',
-          startMs: 900,
-          endMs: 1150,
-          order: 1,
-        },
-        {
-          id: 'up',
-          text: 'up',
-          normalizedText: 'up',
-          startMs: 1150,
-          endMs: 1350,
-          order: 2,
-        },
+        { id: 'naturally', text: 'naturally', normalizedText: 'naturally', startMs: 500, endMs: 900, order: 0 },
+        { id: 'stir', text: 'stir', normalizedText: 'stir', startMs: 900, endMs: 1150, order: 1 },
+        { id: 'up', text: 'up', normalizedText: 'up', startMs: 1150, endMs: 1350, order: 2 },
       ],
-      sentenceTimings: [
-        {
-          id: 's1',
-          text: 'They naturally stir up attention.',
-          startMs: 0,
-          endMs: 2600,
-          wordMarkIds: ['naturally', 'stir', 'up'],
-          order: 0,
-        },
-      ],
+      sentenceTimings: [{ id: 's1', text: itemText(), startMs: 0, endMs: 2000, wordMarkIds: ['naturally', 'stir', 'up'], order: 0 }],
     };
 
     const ranges = buildReadingModeScript({
-      currentItem: phraseItem,
-      durationMs: 2600,
-      focusNormalizedByText: { 'naturally stir up': 'naturally' },
-      mode: { ...teachingMode, unknownWordRepetitions: 2 },
-      unknownNormalizedWords: new Set(['naturally stir up']),
-      wordRepetitionPauseMs: 800,
-    });
-
-    expect(ranges).toEqual([
-      { startMs: 0, endMs: 500 },
-      {
-        startMs: 500,
-        endMs: 1350,
-        pauseAfterMs: 800,
-        pulseTargets: [{ normalizedWord: 'naturally', startMs: 500, endMs: 900 }],
-      },
-      {
-        startMs: 500,
-        endMs: 1350,
-        pulseTargets: [{ normalizedWord: 'naturally', startMs: 500, endMs: 900 }],
-      },
-      { startMs: 1350, endMs: 2600 },
-    ]);
-  });
-
-  it('delays phrase pulse until the selected focus word timing starts', () => {
-    const phraseItem: LessonItem = {
-      ...baseItem,
-      text: 'They naturally stir up attention.',
-      segments: [{ id: 's1', text: 'They naturally stir up attention.', startMs: 0, endMs: 2600 }],
-      chunkTimings: [
-        {
-          id: 'chunk-1',
-          text: 'naturally stir up',
-          normalizedText: 'naturally stir up',
-          startMs: 450,
-          endMs: 1400,
-          wordMarkIds: ['stale-naturally', 'stale-stir', 'stale-up'],
-          order: 0,
-        },
-      ],
-      wordTimings: [
-        {
-          id: 'naturally',
-          text: 'naturally',
-          normalizedText: 'naturally',
-          startMs: 500,
-          endMs: 900,
-          order: 0,
-        },
-        {
-          id: 'stir',
-          text: 'stir',
-          normalizedText: 'stir',
-          startMs: 900,
-          endMs: 1150,
-          order: 1,
-        },
-        {
-          id: 'up',
-          text: 'up',
-          normalizedText: 'up',
-          startMs: 1150,
-          endMs: 1350,
-          order: 2,
-        },
-      ],
-      sentenceTimings: [
-        {
-          id: 's1',
-          text: 'They naturally stir up attention.',
-          startMs: 0,
-          endMs: 2600,
-          wordMarkIds: ['naturally', 'stir', 'up'],
-          order: 0,
-        },
-      ],
-    };
-
-    const ranges = buildReadingModeScript({
-      currentItem: phraseItem,
-      durationMs: 2600,
+      currentItem: item,
+      durationMs: 2000,
       focusNormalizedByText: { 'naturally stir up': 'stir' },
       mode: { ...teachingMode, unknownWordRepetitions: 1 },
       unknownNormalizedWords: new Set(['naturally stir up']),
     });
 
-    expect(ranges).toEqual([
-      { startMs: 0, endMs: 450 },
-      {
-        startMs: 450,
-        endMs: 1400,
-        pulseTargets: [{ normalizedWord: 'stir', startMs: 900, endMs: 1150 }],
-      },
-      { startMs: 1400, endMs: 2600 },
+    expect(ranges[1]).toMatchObject({
+      id: 'word:naturally:stir:up:1',
+      startMs: 500,
+      endMs: 1350,
+      pulseTargets: [{ normalizedWord: 'stir', startMs: 900, endMs: 1150 }],
+    });
+  });
+
+  it('repeats every phrase occurrence and prefers the longest overlapping term', () => {
+    const item: LessonItem = {
+      ...baseItem,
+      text: 'Stir up and stir up.',
+      segments: [{ id: 's1', text: 'Stir up and stir up.', startMs: 0, endMs: 1800 }],
+      wordTimings: [
+        { id: 'stir-1', text: 'Stir', normalizedText: 'stir', startMs: 100, endMs: 300, order: 0 },
+        { id: 'up-1', text: 'up', normalizedText: 'up', startMs: 300, endMs: 450, order: 1 },
+        { id: 'and', text: 'and', normalizedText: 'and', startMs: 600, endMs: 750, order: 2 },
+        { id: 'stir-2', text: 'stir', normalizedText: 'stir', startMs: 900, endMs: 1100, order: 3 },
+        { id: 'up-2', text: 'up', normalizedText: 'up', startMs: 1100, endMs: 1250, order: 4 },
+      ],
+      sentenceTimings: [{ id: 's1', text: 'Stir up and stir up.', startMs: 0, endMs: 1800, wordMarkIds: ['stir-1', 'up-1', 'and', 'stir-2', 'up-2'], order: 0 }],
+    };
+
+    const ranges = buildReadingModeScript({
+      currentItem: item,
+      durationMs: 1800,
+      mode: { ...teachingMode, unknownWordRepetitions: 1 },
+      unknownNormalizedWords: new Set(['stir', 'stir up']),
+    });
+
+    expect(ranges.filter((range) => range.kind === 'word_repeat').map((range) => range.id)).toEqual([
+      'word:stir-1:up-1:1',
+      'word:stir-2:up-2:1',
+    ]);
+  });
+
+  it('repeats qualifying deep-learning sentences immediately after their word work', () => {
+    const item: LessonItem = {
+      ...baseItem,
+      text: 'First hard words. Then continue.',
+      segments: [
+        { id: 's1', text: 'First hard words.', startMs: 0, endMs: 1200 },
+        { id: 's2', text: 'Then continue.', startMs: 1200, endMs: 2200 },
+      ],
+      wordTimings: [
+        { id: 'hard', text: 'hard', normalizedText: 'hard', startMs: 300, endMs: 500, order: 0 },
+        { id: 'words', text: 'words', normalizedText: 'words', startMs: 550, endMs: 800, order: 1 },
+        { id: 'continue', text: 'continue', normalizedText: 'continue', startMs: 1500, endMs: 1800, order: 2 },
+      ],
+      sentenceTimings: [
+        { id: 's1', text: 'First hard words.', startMs: 0, endMs: 1200, wordMarkIds: ['hard', 'words'], order: 0 },
+        { id: 's2', text: 'Then continue.', startMs: 1200, endMs: 2200, wordMarkIds: ['continue'], order: 1 },
+      ],
+    };
+
+    const ranges = buildReadingModeScript({
+      currentItem: item,
+      durationMs: 2200,
+      mode: { ...teachingMode, id: 'deep_learning', repeatSentenceWhenUnknownCountAtLeast: 2, sentenceRepetitions: 2 },
+      unknownNormalizedWords: new Set(['hard', 'words', 'continue']),
+    });
+
+    const firstSecondSentenceStep = ranges.findIndex((range) => range.startMs >= 1200 && range.kind !== 'sentence_repeat');
+    expect(ranges.slice(firstSecondSentenceStep - 2, firstSecondSentenceStep).map((range) => range.id)).toEqual([
+      'sentence:s1:1',
+      'sentence:s1:2',
+    ]);
+    expect(ranges.filter((range) => range.kind === 'sentence_repeat').map((range) => range.id)).toEqual([
+      'sentence:s1:1',
+      'sentence:s1:2',
     ]);
   });
 });
 
 describe('resumePlaybackRanges', () => {
-  it('continues from the paused range instead of restarting the script', () => {
-    const ranges = [
-      { startMs: 0, endMs: 1000 },
-      { startMs: 1000, endMs: 1500 },
-      { startMs: 1000, endMs: 1500 },
-      { startMs: 1500, endMs: 2200 },
-    ];
+  const ranges: PlaybackRange[] = [
+    { id: 'continuous', kind: 'continuous', startMs: 0, endMs: 1000 },
+    { id: 'repeat-1', kind: 'word_repeat', startMs: 1000, endMs: 1500 },
+    { id: 'repeat-2', kind: 'word_repeat', startMs: 1000, endMs: 1500 },
+    { id: 'tail', kind: 'continuous', startMs: 1500, endMs: 2200 },
+  ];
 
-    expect(
-      resumePlaybackRanges({
-        preferredRangeIndex: 2,
-        ranges,
-        resumeMs: 1200,
-      }),
-    ).toEqual({
+  it('resumes a continuous step from the current position', () => {
+    expect(resumePlaybackRanges({ ranges, resumeMs: 1800 }).ranges[0]).toEqual({
+      id: 'tail', kind: 'continuous', startMs: 1800, endMs: 2200,
+    });
+  });
+
+  it('restarts the exact repeated step by stable id', () => {
+    expect(resumePlaybackRanges({ preferredStepId: 'repeat-2', ranges, resumeMs: 1200 })).toEqual({
       startIndex: 2,
-      ranges: [
-        { startMs: 1200, endMs: 1500 },
-        { startMs: 1500, endMs: 2200 },
-      ],
-    });
-  });
-
-  it('restarts a paused repeated word range so the translation pulses again', () => {
-    const ranges = [
-      { startMs: 0, endMs: 1000 },
-      {
-        startMs: 1000,
-        endMs: 1500,
-        pulseTargets: [{ normalizedWord: 'beach', startMs: 1000, endMs: 1500 }],
-      },
-      { startMs: 1500, endMs: 2200 },
-    ];
-
-    expect(
-      resumePlaybackRanges({
-        preferredRangeIndex: 1,
-        ranges,
-        resumeMs: 1300,
-      }),
-    ).toEqual({
-      startIndex: 1,
-      ranges: [
-        {
-          startMs: 1000,
-          endMs: 1500,
-          pulseTargets: [{ normalizedWord: 'beach', startMs: 1000, endMs: 1500 }],
-        },
-        { startMs: 1500, endMs: 2200 },
-      ],
-    });
-  });
-
-  it('falls back to the current audio position when no paused range index is available', () => {
-    expect(
-      resumePlaybackRanges({
-        ranges: [
-          { startMs: 0, endMs: 1000 },
-          { startMs: 1000, endMs: 2000 },
-        ],
-        resumeMs: 1500,
-      }),
-    ).toEqual({
-      startIndex: 1,
-      ranges: [{ startMs: 1500, endMs: 2000 }],
+      ranges: [ranges[2], ranges[3]],
     });
   });
 });
 
 describe('getPulseDurationMs', () => {
-  it('keeps the pulse active through the repeated phrase and configured pause', () => {
-    expect(
-      getPulseDurationMs(
-        {
-          startMs: 500,
-          endMs: 1350,
-          pauseAfterMs: 800,
-        },
-        {
-          normalizedWord: 'naturally',
-          startMs: 500,
-          endMs: 900,
-        },
-      ),
-    ).toBe(1650);
-  });
-
-  it('starts duration from the focus word when it begins inside the phrase', () => {
-    expect(
-      getPulseDurationMs(
-        {
-          startMs: 450,
-          endMs: 1400,
-          pauseAfterMs: 800,
-        },
-        {
-          normalizedWord: 'stir',
-          startMs: 900,
-          endMs: 1150,
-        },
-      ),
-    ).toBe(1300);
+  it('keeps the pulse active through the repeat pause', () => {
+    expect(getPulseDurationMs(
+      { id: 'repeat', kind: 'word_repeat', startMs: 500, endMs: 1350, pauseAfterMs: 800 },
+      { normalizedWord: 'naturally', startMs: 500, endMs: 900 },
+    )).toBe(1650);
   });
 });
+
+function itemText() {
+  return 'They naturally stir up attention.';
+}

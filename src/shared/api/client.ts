@@ -214,6 +214,8 @@ export const apiClient = {
 
   getLesson(token: string, lessonId: string) {
     return request<{ lesson: Lesson }>(`/lessons/${lessonId}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
       method: 'GET',
       token,
     });
@@ -221,6 +223,8 @@ export const apiClient = {
 
   getSettings(token: string) {
     return request<{ settings: AppSettings }>('/settings', {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
       method: 'GET',
       token,
     });

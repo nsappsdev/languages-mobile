@@ -1,10 +1,15 @@
 import type { LessonItem, ReadingModeSettings } from '@/src/types/domain';
 
+export type PlaybackStepKind = 'continuous' | 'word_repeat' | 'sentence_repeat';
+
 export type PlaybackRange = {
+  id: string;
+  kind: PlaybackStepKind;
   startMs: number;
   endMs: number;
   pauseAfterMs?: number;
   pulseTargets?: PulseTarget[];
+  repetitionIndex?: number;
 };
 
 export type PulseTarget = {
@@ -19,14 +24,16 @@ type RepeatTimingRange = {
   normalizedText: string;
   startMs: number;
   endMs: number;
-  timingWords?: TimingWord[];
-  wordMarkIds?: string[];
+  timingWords: TimingWord[];
+  wordMarkIds: string[];
 };
 
 type TimingWord = {
-  endMs?: number;
+  id: string;
+  endMs: number;
   normalizedText: string;
-  startMs?: number;
+  startMs: number;
+  text: string;
 };
 
 export function buildReadingModeScript({
@@ -48,103 +55,124 @@ export function buildReadingModeScript({
     durationMs > 0
       ? durationMs
       : Math.max(0, ...currentItem.segments.map((segment) => segment.endMs));
-  const ranges: PlaybackRange[] = [];
-  const unknownWordRanges = buildUnknownRepeatRanges(currentItem, unknownNormalizedWords);
+  const unknownRanges = buildUnknownRepeatRanges(currentItem, unknownNormalizedWords);
   const wordRepeatCount = Math.max(1, mode.unknownWordRepetitions ?? 1);
-
-  let cursorMs = 0;
-  for (const mark of unknownWordRanges) {
-    if (mark.endMs <= cursorMs) continue;
-    if (mark.startMs > cursorMs) {
-      ranges.push({ startMs: cursorMs, endMs: mark.startMs });
-    }
-
-    const focusNormalizedText = focusNormalizedByText[mark.normalizedText];
-    ranges.push(
-      createWordOrPhraseRange(
-        mark,
-        wordRepeatCount > 1 ? wordRepetitionPauseMs : 0,
-        focusNormalizedText,
-      ),
-    );
-
-    for (let index = 1; index < wordRepeatCount; index += 1) {
-      ranges.push(
-        createWordOrPhraseRange(
-          mark,
-          index < wordRepeatCount - 1 ? wordRepetitionPauseMs : 0,
-          focusNormalizedText,
-        ),
-      );
-    }
-    cursorMs = Math.max(cursorMs, mark.endMs);
-  }
-
-  if (timelineEndMs > cursorMs) {
-    ranges.push({ startMs: cursorMs, endMs: timelineEndMs });
-  }
+  const ranges: PlaybackRange[] = [];
 
   if (mode.id !== 'deep_learning') {
-    return ranges.filter((range) => range.endMs > range.startMs);
+    appendTeachingWindow({
+      endMs: timelineEndMs,
+      focusNormalizedByText,
+      ranges,
+      repeatRanges: unknownRanges,
+      startMs: 0,
+      wordRepeatCount,
+      wordRepetitionPauseMs,
+    });
+    return ranges;
   }
 
-  const unknownWordIds = new Set(
-    unknownWordRanges.flatMap((mark) => mark.wordMarkIds?.length ? mark.wordMarkIds : [mark.id]),
+  const sentences = [...(currentItem.sentenceTimings ?? [])].sort(
+    (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
   );
   const threshold = Math.max(1, mode.repeatSentenceWhenUnknownCountAtLeast ?? 2);
   const sentenceRepeatCount = Math.max(1, mode.sentenceRepetitions ?? 2);
-  const sentenceRepeats = [...(currentItem.sentenceTimings ?? [])]
-    .filter(
-      (sentence) =>
-        sentence.wordMarkIds.filter((wordMarkId) => unknownWordIds.has(wordMarkId)).length >=
-        threshold,
-    )
-    .sort((left, right) => left.startMs - right.startMs);
+  let cursorMs = 0;
 
-  for (const sentence of sentenceRepeats) {
-    for (let index = 0; index < sentenceRepeatCount; index += 1) {
-      ranges.push({ startMs: sentence.startMs, endMs: sentence.endMs });
+  for (const sentence of sentences) {
+    if (sentence.endMs <= cursorMs || sentence.startMs >= timelineEndMs) continue;
+    const sentenceStartMs = Math.max(cursorMs, sentence.startMs);
+    if (sentenceStartMs > cursorMs) {
+      appendTeachingWindow({
+        endMs: sentenceStartMs,
+        focusNormalizedByText,
+        ranges,
+        repeatRanges: unknownRanges,
+        startMs: cursorMs,
+        wordRepeatCount,
+        wordRepetitionPauseMs,
+      });
     }
+
+    const sentenceEndMs = Math.min(timelineEndMs, sentence.endMs);
+    appendTeachingWindow({
+      endMs: sentenceEndMs,
+      focusNormalizedByText,
+      ranges,
+      repeatRanges: unknownRanges,
+      startMs: sentenceStartMs,
+      wordRepeatCount,
+      wordRepetitionPauseMs,
+    });
+
+    const sentenceWordIds = new Set(sentence.wordMarkIds);
+    const unknownCount = new Set(
+      unknownRanges
+        .filter((range) => range.startMs >= sentenceStartMs && range.startMs < sentenceEndMs)
+        .flatMap((range) => range.wordMarkIds)
+        .filter((wordMarkId) => sentenceWordIds.has(wordMarkId)),
+    ).size;
+    if (unknownCount >= threshold) {
+      for (let index = 0; index < sentenceRepeatCount; index += 1) {
+        ranges.push({
+          id: `sentence:${sentence.id}:${index + 1}`,
+          kind: 'sentence_repeat',
+          startMs: sentence.startMs,
+          endMs: sentence.endMs,
+          repetitionIndex: index + 1,
+        });
+      }
+    }
+    cursorMs = sentenceEndMs;
+  }
+
+  if (cursorMs < timelineEndMs) {
+    appendTeachingWindow({
+      endMs: timelineEndMs,
+      focusNormalizedByText,
+      ranges,
+      repeatRanges: unknownRanges,
+      startMs: cursorMs,
+      wordRepeatCount,
+      wordRepetitionPauseMs,
+    });
   }
 
   return ranges.filter((range) => range.endMs > range.startMs);
 }
 
 export function resumePlaybackRanges({
-  preferredRangeIndex,
+  preferredStepId,
   ranges,
   resumeMs,
 }: {
-  preferredRangeIndex?: number | null;
+  preferredStepId?: string | null;
   ranges: PlaybackRange[];
   resumeMs: number;
 }) {
+  const preferredIndex = preferredStepId
+    ? ranges.findIndex((range) => range.id === preferredStepId)
+    : -1;
   const startIndex =
-    preferredRangeIndex !== null &&
-    preferredRangeIndex !== undefined &&
-    ranges[preferredRangeIndex]?.endMs > resumeMs
-      ? preferredRangeIndex
-      : Math.max(0, ranges.findIndex((range) => range.endMs > resumeMs));
+    preferredIndex >= 0 && ranges[preferredIndex].endMs > resumeMs
+      ? preferredIndex
+      : ranges.findIndex((range) => range.endMs > resumeMs);
 
   if (startIndex < 0 || startIndex >= ranges.length) {
     return { ranges: [], startIndex: ranges.length };
   }
 
-  const resumedRanges = ranges.slice(startIndex);
+  const resumedRanges = ranges.slice(startIndex).map((range) => ({ ...range }));
   const firstRange = resumedRanges[0];
-  if (resumeMs > firstRange.startMs && resumeMs < firstRange.endMs) {
-    if (!firstRange.pulseTargets?.length) {
-      resumedRanges[0] = {
-        ...firstRange,
-        startMs: resumeMs,
-      };
-    }
+  if (
+    resumeMs > firstRange.startMs &&
+    resumeMs < firstRange.endMs &&
+    firstRange.kind === 'continuous'
+  ) {
+    resumedRanges[0].startMs = resumeMs;
   }
 
-  return {
-    ranges: resumedRanges.filter((range) => range.endMs > range.startMs),
-    startIndex,
-  };
+  return { ranges: resumedRanges, startIndex };
 }
 
 export function getPulseDurationMs(range: PlaybackRange, target: PulseTarget) {
@@ -152,53 +180,88 @@ export function getPulseDurationMs(range: PlaybackRange, target: PulseTarget) {
   return Math.max(1, range.endMs - pulseStartMs + (range.pauseAfterMs ?? 0));
 }
 
-function createWordOrPhraseRange(
-  mark: RepeatTimingRange,
-  pauseAfterMs = 0,
-  focusNormalizedText?: string,
-): PlaybackRange {
-  const words = mark.timingWords?.length
-    ? mark.timingWords
-    : splitTimingWords(mark.text, mark.normalizedText);
-  const pause = pauseAfterMs > 0 ? { pauseAfterMs } : {};
-  if (words.length <= 1) {
-    return {
-      ...pause,
-      startMs: mark.startMs,
-      endMs: mark.endMs,
-      pulseTargets: [
-        {
-          normalizedWord: words.length ? words[0].normalizedText : mark.normalizedText,
-          startMs: words[0]?.startMs ?? mark.startMs,
-          endMs: words[0]?.endMs ?? mark.endMs,
-        },
-      ],
-    };
+function appendTeachingWindow({
+  endMs,
+  focusNormalizedByText,
+  ranges,
+  repeatRanges,
+  startMs,
+  wordRepeatCount,
+  wordRepetitionPauseMs,
+}: {
+  endMs: number;
+  focusNormalizedByText: Record<string, string | undefined>;
+  ranges: PlaybackRange[];
+  repeatRanges: RepeatTimingRange[];
+  startMs: number;
+  wordRepeatCount: number;
+  wordRepetitionPauseMs: number;
+}) {
+  let cursorMs = startMs;
+  const windowRanges = repeatRanges.filter(
+    (range) => range.startMs >= startMs && range.startMs < endMs && range.endMs <= endMs,
+  );
+
+  for (const mark of windowRanges) {
+    if (mark.endMs <= cursorMs) continue;
+    if (mark.startMs > cursorMs) {
+      ranges.push(createContinuousRange(cursorMs, mark.startMs));
+    }
+    for (let index = 0; index < wordRepeatCount; index += 1) {
+      ranges.push(
+        createWordOrPhraseRange({
+          focusNormalizedText: focusNormalizedByText[mark.normalizedText],
+          mark,
+          pauseAfterMs: index < wordRepeatCount - 1 ? wordRepetitionPauseMs : 0,
+          repetitionIndex: index + 1,
+        }),
+      );
+    }
+    cursorMs = Math.max(cursorMs, mark.endMs);
   }
 
-  const distributedPulseTargets =
-    mark.timingWords?.length
-      ? mark.timingWords.map((word) => ({
-          normalizedWord: word.normalizedText,
-          startMs: word.startMs ?? mark.startMs,
-          endMs: word.endMs ?? mark.endMs,
-        }))
-      : distributePulseTargets({
-          endMs: mark.endMs,
-          startMs: mark.startMs,
-          words,
-        });
-  const pulseTargets = distributedPulseTargets.filter(
+  if (endMs > cursorMs) {
+    ranges.push(createContinuousRange(cursorMs, endMs));
+  }
+}
+
+function createContinuousRange(startMs: number, endMs: number): PlaybackRange {
+  return {
+    id: `continuous:${startMs}:${endMs}`,
+    kind: 'continuous',
+    startMs,
+    endMs,
+  };
+}
+
+function createWordOrPhraseRange({
+  focusNormalizedText,
+  mark,
+  pauseAfterMs,
+  repetitionIndex,
+}: {
+  focusNormalizedText?: string;
+  mark: RepeatTimingRange;
+  pauseAfterMs: number;
+  repetitionIndex: number;
+}): PlaybackRange {
+  const distributedPulseTargets = mark.timingWords.map((word) => ({
+    normalizedWord: word.normalizedText,
+    startMs: word.startMs,
+    endMs: word.endMs,
+  }));
+  const focusedTargets = distributedPulseTargets.filter(
     (target) => !focusNormalizedText || target.normalizedWord === focusNormalizedText,
   );
 
   return {
-    ...pause,
+    id: `word:${mark.id}:${repetitionIndex}`,
+    kind: 'word_repeat',
     startMs: mark.startMs,
     endMs: mark.endMs,
-    pulseTargets: pulseTargets.length
-      ? pulseTargets
-      : distributedPulseTargets,
+    repetitionIndex,
+    ...(pauseAfterMs > 0 ? { pauseAfterMs } : {}),
+    pulseTargets: focusedTargets.length ? focusedTargets : distributedPulseTargets,
   };
 }
 
@@ -206,180 +269,41 @@ function buildUnknownRepeatRanges(
   currentItem: LessonItem,
   unknownNormalizedWords: Set<string>,
 ): RepeatTimingRange[] {
-  const coveredWordIds = new Set<string>();
-  const coveredNormalizedTexts = new Set<string>();
-  const wordTimingsById = new Map(
-    [...(currentItem.wordTimings ?? [])].map((mark) => [mark.id, mark]),
-  );
-  const chunkRanges = [...(currentItem.chunkTimings ?? [])]
-    .filter((chunk) => unknownNormalizedWords.has(chunk.normalizedText))
-    .map((chunk) => {
-      chunk.wordMarkIds.forEach((wordMarkId) => coveredWordIds.add(wordMarkId));
-      coveredNormalizedTexts.add(chunk.normalizedText);
-      const linkedTimingWords = chunk.wordMarkIds
-        .map((wordMarkId) => wordTimingsById.get(wordMarkId))
-        .filter((word): word is LessonItem['wordTimings'][number] => Boolean(word))
-        .sort((left, right) => left.startMs - right.startMs || left.endMs - right.endMs)
-        .map((word) => ({
-          endMs: word.endMs,
-          normalizedText: word.normalizedText,
-          startMs: word.startMs,
-        }));
-      const fallbackTimingWords = findPhraseTimingWordsFromWordTimings(
-        currentItem,
-        chunk.normalizedText,
-      );
-      const timingWords = linkedTimingWords.length ? linkedTimingWords : fallbackTimingWords;
-      return {
-        id: chunk.id,
-        text: chunk.text,
-        normalizedText: chunk.normalizedText,
-        startMs: chunk.startMs,
-        endMs: chunk.endMs,
-        timingWords,
-        wordMarkIds: chunk.wordMarkIds,
-      };
-    });
-  const phraseRanges = [...unknownNormalizedWords]
-    .filter((normalizedText) => normalizedText.includes(' '))
-    .filter((normalizedText) => !coveredNormalizedTexts.has(normalizedText))
-    .map((normalizedText) => buildPhraseRangeFromWordTimings(currentItem, normalizedText))
-    .filter((range): range is RepeatTimingRange => Boolean(range))
-    .filter((range) => !range.wordMarkIds?.some((wordMarkId) => coveredWordIds.has(wordMarkId)))
-    .map((range) => {
-      range.wordMarkIds?.forEach((wordMarkId) => coveredWordIds.add(wordMarkId));
-      return range;
-    });
-  const wordRanges = [...(currentItem.wordTimings ?? [])]
-    .filter((mark) => unknownNormalizedWords.has(mark.normalizedText))
-    .filter((mark) => !coveredWordIds.has(mark.id))
-    .map((mark) => ({
-      id: mark.id,
-      text: mark.text,
-      normalizedText: mark.normalizedText,
-      startMs: mark.startMs,
-      endMs: mark.endMs,
-    }));
-
-  return [...chunkRanges, ...phraseRanges, ...wordRanges].sort(
+  const timings = [...(currentItem.wordTimings ?? [])].sort(
     (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
   );
-}
-
-function buildPhraseRangeFromWordTimings(
-  currentItem: LessonItem,
-  normalizedText: string,
-): RepeatTimingRange | null {
-  const candidate = findPhraseTimingWordsFromWordTimings(currentItem, normalizedText);
-  if (!candidate.length) {
-    return null;
-  }
-
-  const wordTimings = [...(currentItem.wordTimings ?? [])].sort(
-    (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
-  );
-  const wordMarkIds = candidate
-    .map((word) =>
-      wordTimings.find(
-        (mark) =>
-          mark.normalizedText === word.normalizedText &&
-          mark.startMs === word.startMs &&
-          mark.endMs === word.endMs,
-      )?.id,
-    )
-    .filter((id): id is string => Boolean(id));
-
-  return {
-    id: `phrase:${wordMarkIds.join(':')}`,
-    text: candidate.map((word) => word.text).join(' '),
-    normalizedText,
-    startMs: candidate[0].startMs,
-    endMs: candidate[candidate.length - 1].endMs,
-    timingWords: candidate.map(({ endMs, normalizedText, startMs }) => ({
-      endMs,
+  const candidates = [...unknownNormalizedWords]
+    .map((normalizedText) => ({
       normalizedText,
-      startMs,
-    })),
-    wordMarkIds,
-  };
-}
+      parts: normalizedText.split(/\s+/).filter(Boolean),
+    }))
+    .filter((candidate) => candidate.parts.length > 0)
+    .sort((left, right) => right.parts.length - left.parts.length);
+  const ranges: RepeatTimingRange[] = [];
 
-function findPhraseTimingWordsFromWordTimings(
-  currentItem: LessonItem,
-  normalizedText: string,
-): (TimingWord & { text: string; endMs: number; startMs: number })[] {
-  const phraseParts = normalizedText.split(/\s+/).filter(Boolean);
-  if (phraseParts.length < 2) {
-    return [];
-  }
-
-  const wordTimings = [...(currentItem.wordTimings ?? [])].sort(
-    (left, right) => left.startMs - right.startMs || left.endMs - right.endMs,
-  );
-  for (let startIndex = 0; startIndex <= wordTimings.length - phraseParts.length; startIndex += 1) {
-    const candidate = wordTimings.slice(startIndex, startIndex + phraseParts.length);
-    if (candidate.every((word, index) => word.normalizedText === phraseParts[index])) {
-      return candidate.map((word) => ({
-        endMs: word.endMs,
-        normalizedText: word.normalizedText,
-        startMs: word.startMs,
-        text: word.text,
-      }));
+  for (let index = 0; index < timings.length;) {
+    const candidate = candidates.find(({ parts }) =>
+      parts.every(
+        (part, offset) => timings[index + offset]?.normalizedText === part,
+      ),
+    );
+    if (!candidate) {
+      index += 1;
+      continue;
     }
+
+    const words = timings.slice(index, index + candidate.parts.length);
+    ranges.push({
+      id: words.map((word) => word.id).join(':'),
+      text: words.map((word) => word.text).join(' '),
+      normalizedText: candidate.normalizedText,
+      startMs: words[0].startMs,
+      endMs: words[words.length - 1].endMs,
+      timingWords: words,
+      wordMarkIds: words.map((word) => word.id),
+    });
+    index += words.length;
   }
 
-  return [];
-}
-
-function distributePulseTargets({
-  endMs,
-  startMs,
-  words,
-}: {
-  endMs: number;
-  startMs: number;
-  words: { normalizedText: string }[];
-}): PulseTarget[] {
-  const durationMs = Math.max(1, endMs - startMs);
-  const weights = words.map((word) => Math.max(1, word.normalizedText.length));
-  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-  let elapsedWeight = 0;
-
-  return words.map((word, index) => {
-    const targetStartMs = startMs + Math.round((durationMs * elapsedWeight) / totalWeight);
-    elapsedWeight += weights[index];
-    const targetEndMs =
-      index === words.length - 1
-        ? endMs
-        : startMs + Math.round((durationMs * elapsedWeight) / totalWeight);
-
-    return {
-      normalizedWord: word.normalizedText,
-      startMs: targetStartMs,
-      endMs: Math.max(targetStartMs + 1, targetEndMs),
-    };
-  });
-}
-
-function splitTimingWords(text: string, fallbackNormalizedText: string) {
-  const normalizedFallbackWords = fallbackNormalizedText
-    .split(/\s+/)
-    .map((word) => word.trim())
-    .filter(Boolean);
-  const textWords = text.match(/[A-Za-z0-9]+(?:[’'][A-Za-z0-9]+)?/g) ?? [];
-  const sourceWords = textWords.length ? textWords : normalizedFallbackWords;
-
-  return sourceWords
-    .map((word) => normalizeTimingWord(word))
-    .filter((normalizedText) => normalizedText.length > 0)
-    .map((normalizedText): TimingWord => ({ normalizedText }));
-}
-
-function normalizeTimingWord(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[’]/g, "'")
-    .replace(/(^'+|'+$)/g, '')
-    .replace(/'s$/g, '');
+  return ranges;
 }

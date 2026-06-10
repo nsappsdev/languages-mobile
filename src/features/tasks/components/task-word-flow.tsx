@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 import { TOKEN_WORD_HORIZONTAL_PADDING } from '@/src/features/tasks/constants/task-runner';
 import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
@@ -15,9 +15,8 @@ import {
 import { wordFlowStyles } from '@/src/features/tasks/components/task-word-flow.styles';
 import type { TaskWordFlowProps } from '@/src/features/tasks/components/task-word-flow.types';
 
-export function TaskWordFlow({
+export const TaskWordFlow = memo(function TaskWordFlow({
   activeSegmentId,
-  activeWordTimingId,
   entryCacheByText,
   getTokenPulseValue,
   handleSeekToSegment,
@@ -33,7 +32,6 @@ export function TaskWordFlow({
   segmentStartById,
   tokenSegmentIds,
   tokenWidths,
-  tokenWordTimingIds,
   translationFitSettings,
   translationFontFamily,
   triggerTokenFeedback,
@@ -55,9 +53,7 @@ export function TaskWordFlow({
       {wordTokens.map((tok, idx) => {
         const match = vocabularyTokenMatches[idx];
         const segmentId = tokenSegmentIds[idx] ?? null;
-        const wordTimingId = tokenWordTimingIds[idx] ?? null;
         const isActiveSegment = segmentId !== null && segmentId === activeSegmentId;
-        const isActiveWord = activeWordTimingId !== null && wordTimingId === activeWordTimingId;
         const segmentStartMs = segmentId ? segmentStartById[segmentId] ?? null : null;
         if (!tok.normalized) {
           return (
@@ -126,12 +122,8 @@ export function TaskWordFlow({
           match && shouldRenderTranslation ? match.focusNormalizedText ?? normalizedWord : tok.normalized;
         const pulseValue = getTokenPulseValue(pulseNormalizedWord);
         const pulseScale = pulseValue.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [1, 1.04, 1],
-        });
-        const pulseOpacity = pulseValue.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [0.96, 1, 0.96],
+          inputRange: [0, 1],
+          outputRange: [1, 1.2],
         });
 
         return (
@@ -178,7 +170,6 @@ export function TaskWordFlow({
                     minHeight: translationLineHeight,
                   },
                   {
-                    opacity: pulseOpacity,
                     transform: [{ scale: pulseScale }],
                   },
                   !tokenTranslation.visible && wordFlowStyles.tokenTranslationHidden,
@@ -198,7 +189,6 @@ export function TaskWordFlow({
                     lineHeight: mainTextLineHeight,
                   },
                   isActiveSegment && wordFlowStyles.tokenWordActive,
-                  isActiveWord && wordFlowStyles.tokenWordSpeaking,
                   isSelected && wordFlowStyles.tokenWordSaved,
                   revealTranslation && !isSelected && wordFlowStyles.tokenWordUnknown,
                   shouldRenderTranslation &&
@@ -215,4 +205,4 @@ export function TaskWordFlow({
       })}
     </View>
   );
-}
+});

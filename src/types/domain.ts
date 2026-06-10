@@ -41,6 +41,7 @@ export interface LessonItemChunkTiming {
 export interface LessonItem {
   id: string;
   lessonId: string;
+  updatedAt?: string;
   order: number;
   text: string;
   audioUrl: string;

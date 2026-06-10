@@ -54,9 +54,6 @@ export const wordFlowStyles = StyleSheet.create({
   tokenWordActive: {
     backgroundColor: '#eff6ff',
   },
-  tokenWordSpeaking: {
-    backgroundColor: '#bfdbfe',
-  },
   tokenWordSaved: {
     color: '#1d4ed8',
   },

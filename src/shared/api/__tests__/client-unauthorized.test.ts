@@ -108,4 +108,18 @@ describe('api client unauthorized handling', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
+
+  it('requests lesson timings without HTTP cache reuse', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ lesson: { id: 'lesson-1', items: [] } }),
+    } as unknown as Response);
+
+    await apiClient.getLesson('token', 'lesson-1');
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.cache).toBe('no-store');
+    expect((init?.headers as Headers).get('Cache-Control')).toBe('no-cache');
+  });
 });

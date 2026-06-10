@@ -37,7 +37,7 @@ Expo Router mobile client for the language learning app.
 - Session persistence is implemented (secure store on native when available, safe browser storage fallback on web).
 - Progress sync events are implemented with queued batching and retry.
 - Dashboard now enforces level-order lesson progression (future lessons lock until current is completed).
-- Lesson runner supports cached audio playback, phrase/word timing, reading modes, and tap-to-mark-unknown vocabulary reveal.
+- Lesson runner uses fresh server timings on each focus, caches audio by upload URL, derives phrase ranges from consecutive word timings, and supports tap-to-mark-unknown vocabulary reveal.
 - Vocabulary sync is user-scoped: local status changes are cached immediately, then flushed to the backend.
 
 ## Production Builds (EAS)

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback, useRef, useState } from 'react';
 import {
   getCachedLessonDictionary,
   setCachedLessonDictionary,
@@ -13,59 +14,59 @@ export function useTaskRunnerData({ lessonId, token }: { lessonId: string; token
   const [entryCacheByText, setEntryCacheByText] = useState<Record<string, VocabularyEntry>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token || !lessonId) {
       setIsLoading(false);
       return;
     }
 
-    let cancelled = false;
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [lessonResponse, settingsResponse] = await Promise.all([
+        apiClient.getLesson(token, lessonId),
+        apiClient.getSettings(token),
+      ]);
+      if (requestIdRef.current !== requestId) return;
 
-    const seedFromCache = async () => {
-      const cached = await getCachedLessonDictionary(lessonId);
-      if (!cancelled && cached.length) {
-        setEntryCacheByText(buildEntryCacheByText(cached));
+      const dictionary = lessonResponse.lesson.vocabulary ?? lessonResponse.lesson.dictionary ?? [];
+      setLesson(lessonResponse.lesson);
+      setAppSettings(settingsResponse.settings);
+      setEntryCacheByText(buildEntryCacheByText(dictionary));
+      void setCachedLessonDictionary(lessonId, dictionary);
+    } catch (err) {
+      if (requestIdRef.current !== requestId) return;
+      if (err instanceof ApiError || err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Failed to load lesson.');
       }
-    };
-
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const [lessonResponse, settingsResponse] = await Promise.all([
-          apiClient.getLesson(token, lessonId),
-          apiClient.getSettings(token),
-        ]);
-        if (cancelled) return;
-        setLesson(lessonResponse.lesson);
-        setAppSettings(settingsResponse.settings);
-        const dictionary = lessonResponse.lesson.vocabulary ?? lessonResponse.lesson.dictionary ?? [];
-        if (dictionary.length) {
-          setEntryCacheByText((prev) => ({ ...prev, ...buildEntryCacheByText(dictionary) }));
-          void setCachedLessonDictionary(lessonId, dictionary);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError) {
-          setError(err.message);
-        } else if (err instanceof Error) {
-          setError(err.message);
-        } else {
-          setError('Failed to load lesson.');
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
+    } finally {
+      if (requestIdRef.current === requestId) {
+        setIsLoading(false);
       }
-    };
-
-    seedFromCache().catch(() => null);
-    load().catch(() => null);
-
-    return () => {
-      cancelled = true;
-    };
+    }
   }, [lessonId, token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void getCachedLessonDictionary(lessonId).then((cached) => {
+        if (active && cached.length) {
+          setEntryCacheByText(buildEntryCacheByText(cached));
+        }
+      });
+      void load();
+      return () => {
+        active = false;
+        requestIdRef.current += 1;
+      };
+    }, [lessonId, load]),
+  );
 
   return {
     appSettings,
@@ -73,5 +74,6 @@ export function useTaskRunnerData({ lessonId, token }: { lessonId: string; token
     error,
     isLoading,
     lesson,
+    reload: load,
   };
 }

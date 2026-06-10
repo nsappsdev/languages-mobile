@@ -17,7 +17,6 @@ import {
 } from '@/src/features/lessons/progression-storage';
 import { flushProgressQueue, queueProgressEvents } from '@/src/features/progress/progress-sync';
 import {
-  ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS,
   DEFAULT_READING_MODES,
   TOKEN_WORD_FONT_SIZE,
   TOKEN_WORD_LINE_HEIGHT,
@@ -39,14 +38,9 @@ import {
   buildVocabularyTokenMatches,
   createIdempotencyKey,
   formatSeconds,
-  getAnticipatedSegmentId,
 } from '@/src/features/tasks/services/task-runner-helpers';
 import { tokenizeLessonText } from '@/src/features/tasks/screens/task-runner-words';
 import { getTokenSegmentIds } from '@/src/features/tasks/screens/task-runner-segments';
-import {
-  getActiveWordTimingId,
-  getTokenWordTimingIds,
-} from '@/src/features/tasks/screens/task-runner-word-timings';
 import { useSession } from '@/src/shared/auth/session-context';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
@@ -78,7 +72,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const pendingScrollSegmentIdRef = useRef<string | null>(null);
   const tokenPulseValuesRef = useRef(new Map<string, Animated.Value>());
 
-  const { appSettings, entryCacheByText, error, isLoading, lesson } = useTaskRunnerData({
+  const { appSettings, entryCacheByText, error, isLoading, lesson, reload } = useTaskRunnerData({
     lessonId,
     token,
   });
@@ -103,15 +97,25 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     [lesson],
   );
 
+  useEffect(() => {
+    if (items.length && currentItemIndex >= items.length) {
+      setCurrentItemIndex(0);
+    }
+  }, [currentItemIndex, items.length]);
+
   const currentItem = items[currentItemIndex];
   const currentAudioUrl = useMemo(
     () => (currentItem?.audioUrl ? resolveApiAssetUrl(currentItem.audioUrl) : null),
     [currentItem?.audioUrl],
   );
+  const nextAudioUrl = useMemo(() => {
+    const nextItem = items[currentItemIndex + 1];
+    return nextItem?.audioUrl ? resolveApiAssetUrl(nextItem.audioUrl) : null;
+  }, [currentItemIndex, items]);
   const { isAudioCaching, playableAudioUrl, playbackStatus, player } = useRunnerAudio({
     currentAudioUrl,
-    currentItemIndex,
-    items,
+    currentItem,
+    nextAudioUrl,
   });
   const isPlaying = playbackStatus.playing;
 
@@ -143,32 +147,39 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     void Haptics.selectionAsync().catch(() => null);
   }, []);
 
-  const triggerTranslationHeartbeat = useCallback((normalizedWord: string, durationMs: number) => {
-    const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
-    tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
-    const riseDuration = 320;
-    const fallDuration = 520;
-    const holdDuration = Math.max(450, Math.min(durationMs - riseDuration - fallDuration, 1200));
+  const triggerTranslationHeartbeat = useCallback(
+    (normalizedWord: string, durationMs: number) => {
+      const pulseValue =
+        tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
+      tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
+      const riseDuration = 480;
+      const fallDuration = 680;
+      const holdDuration = Math.max(
+        280,
+        Math.min(durationMs - riseDuration - fallDuration, 900),
+      );
 
-    pulseValue.stopAnimation(() => {
-      pulseValue.setValue(0);
-      Animated.sequence([
-        Animated.timing(pulseValue, {
-          toValue: 1,
-          duration: riseDuration,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.delay(holdDuration),
-        Animated.timing(pulseValue, {
-          toValue: 0,
-          duration: fallDuration,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  }, []);
+      pulseValue.stopAnimation(() => {
+        pulseValue.setValue(0);
+        Animated.sequence([
+          Animated.timing(pulseValue, {
+            toValue: 1,
+            duration: riseDuration,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.delay(holdDuration),
+          Animated.timing(pulseValue, {
+            toValue: 0,
+            duration: fallDuration,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ]).start();
+      });
+    },
+    [],
+  );
 
   const getTokenPulseValue = useCallback((normalizedWord: string) => {
     const existing = tokenPulseValuesRef.current.get(normalizedWord);
@@ -243,40 +254,8 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     });
   }, [completedItemIds, currentItem, items.length, lessonId, queueProgressEvent]);
 
-  const activeSegmentId = useMemo(() => {
-    if (!currentItem) {
-      return null;
-    }
-
-    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
-    const activeSegment = currentItem.segments.find(
-      (segment) => currentPositionMs >= segment.startMs && currentPositionMs < segment.endMs,
-    );
-
-    return activeSegment?.id ?? null;
-  }, [currentItem, playbackStatus.currentTime]);
-
-  const activeWordTimingId = useMemo(() => {
-    if (!currentItem) {
-      return null;
-    }
-
-    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
-    return getActiveWordTimingId(currentItem.wordTimings ?? [], currentPositionMs);
-  }, [currentItem, playbackStatus.currentTime]);
-
-  const scrollTargetSegmentId = useMemo(() => {
-    if (!currentItem || !isPlaying) {
-      return activeSegmentId;
-    }
-
-    const currentPositionMs = Math.round((playbackStatus.currentTime ?? 0) * 1000);
-    return getAnticipatedSegmentId({
-      lookaheadMs: ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS,
-      positionMs: currentPositionMs,
-      segments: currentItem.segments,
-    });
-  }, [activeSegmentId, currentItem, isPlaying, playbackStatus.currentTime]);
+  const activeSegmentId = playbackStatus.activeSegmentId;
+  const scrollTargetSegmentId = playbackStatus.scrollTargetSegmentId;
 
   const wordTokens = useMemo(
     () => (currentItem ? tokenizeLessonText(currentItem.text) : []),
@@ -288,13 +267,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       return wordTokens.map(() => null);
     }
     return getTokenSegmentIds(wordTokens, currentItem.text, currentItem.segments);
-  }, [currentItem, wordTokens]);
-
-  const tokenWordTimingIds = useMemo((): (string | null)[] => {
-    if (!currentItem || !currentItem.wordTimings.length) {
-      return wordTokens.map(() => null);
-    }
-    return getTokenWordTimingIds(wordTokens, currentItem.text, currentItem.wordTimings);
   }, [currentItem, wordTokens]);
 
   const vocabularyTokenMatches = useMemo(
@@ -469,6 +441,12 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     cancelModePlayback();
   }, [cancelModePlayback, currentItemIndex, resetVocabularyForItem]);
 
+  useEffect(() => {
+    if (isLoading) {
+      cancelModePlayback();
+    }
+  }, [cancelModePlayback, currentItem?.updatedAt, isLoading, lesson?.updatedAt]);
+
   const translationFitSettings = useMemo(
     () => ({
       maxFontSize: appSettings?.translationFontMaxSize ?? appSettings?.translationFontSize ?? 15,
@@ -627,6 +605,12 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     return (
       <RunnerMessageScreen onBack={handleGoToDashboard}>
         <Text style={styles.error}>{error ?? 'Unable to load lesson player.'}</Text>
+        <PrimaryButton
+          title="Retry"
+          onPress={() => {
+            void reload();
+          }}
+        />
       </RunnerMessageScreen>
     );
   }
@@ -671,7 +655,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
             <TaskWordFlow
               activeSegmentId={activeSegmentId}
-              activeWordTimingId={activeWordTimingId}
               entryCacheByText={entryCacheByText}
               getTokenPulseValue={getTokenPulseValue}
               handleSeekToSegment={handleSeekToSegment}
@@ -687,7 +670,6 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               segmentStartById={segmentStartById}
               tokenSegmentIds={tokenSegmentIds}
               tokenWidths={tokenWidths}
-              tokenWordTimingIds={tokenWordTimingIds}
               translationFitSettings={translationFitSettings}
               translationFontFamily={translationFontFamily}
               triggerTokenFeedback={triggerTokenFeedback}

@@ -45,6 +45,19 @@ export async function ensureAudioCached(sourceUrl: string) {
   return download.uri;
 }
 
+export async function getCachedAudioUri(sourceUrl: string) {
+  if (!sourceUrl.trim() || Platform.OS === 'web') {
+    return null;
+  }
+  const cacheDir = await ensureAudioCacheDir();
+  if (!cacheDir) return null;
+  const targetUri = `${cacheDir}${buildCacheFileName(sourceUrl)}`;
+  const fileInfo = await FileSystem.getInfoAsync(targetUri);
+  return fileInfo.exists && !fileInfo.isDirectory && (fileInfo.size ?? 0) > 0
+    ? targetUri
+    : null;
+}
+
 export async function prefetchAudio(sourceUrl: string) {
   try {
     return await ensureAudioCached(sourceUrl);
