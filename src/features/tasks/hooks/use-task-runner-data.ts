@@ -1,5 +1,6 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import {
   getCachedLessonDictionary,
   setCachedLessonDictionary,
@@ -67,6 +68,21 @@ export function useTaskRunnerData({ lessonId, token }: { lessonId: string; token
       };
     }, [lessonId, load]),
   );
+
+  useEffect(() => {
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const returningToForeground =
+        nextState === 'active' &&
+        (previousState === 'background' || previousState === 'inactive');
+      previousState = nextState;
+      if (returningToForeground) {
+        void load();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [load]);
 
   return {
     appSettings,

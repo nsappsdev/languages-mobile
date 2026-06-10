@@ -50,6 +50,42 @@ describe('buildReadingModeScript', () => {
     ]);
   });
 
+  it('uses the latest edited end millisecond for each repeated word', () => {
+    const item: LessonItem = {
+      ...baseItem,
+      text: 'Everyone has insecurities.',
+      segments: [{ id: 'sentence-1', text: 'Everyone has insecurities.', startMs: 0, endMs: 1840 }],
+      wordTimings: [
+        { id: 'everyone', text: 'Everyone', normalizedText: 'everyone', startMs: 0, endMs: 700, order: 0 },
+        { id: 'has', text: 'has', normalizedText: 'has', startMs: 760, endMs: 1120, order: 1 },
+        { id: 'insecurities', text: 'insecurities', normalizedText: 'insecurities', startMs: 1120, endMs: 1840, order: 2 },
+      ],
+      sentenceTimings: [
+        {
+          id: 'sentence-1',
+          text: 'Everyone has insecurities.',
+          startMs: 0,
+          endMs: 1840,
+          wordMarkIds: ['everyone', 'has', 'insecurities'],
+          order: 0,
+        },
+      ],
+    };
+
+    const ranges = buildReadingModeScript({
+      currentItem: item,
+      durationMs: 1840,
+      mode: { ...teachingMode, unknownWordRepetitions: 3 },
+      unknownNormalizedWords: new Set(['everyone']),
+    });
+
+    expect(ranges.filter((range) => range.kind === 'word_repeat')).toEqual([
+      expect.objectContaining({ id: 'word:everyone:1', startMs: 0, endMs: 700 }),
+      expect.objectContaining({ id: 'word:everyone:2', startMs: 0, endMs: 700 }),
+      expect.objectContaining({ id: 'word:everyone:3', startMs: 0, endMs: 700 }),
+    ]);
+  });
+
   it('derives phrases from word timings and ignores stale logical chunks', () => {
     const item: LessonItem = {
       ...baseItem,

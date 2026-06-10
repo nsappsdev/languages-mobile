@@ -213,9 +213,13 @@ export const apiClient = {
   },
 
   getLesson(token: string, lessonId: string) {
-    return request<{ lesson: Lesson }>(`/lessons/${lessonId}`, {
+    const freshness = Date.now();
+    return request<{ lesson: Lesson }>(`/lessons/${lessonId}?fresh=${freshness}`, {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
+      headers: {
+        'Cache-Control': 'no-cache, no-store',
+        Pragma: 'no-cache',
+      },
       method: 'GET',
       token,
     });

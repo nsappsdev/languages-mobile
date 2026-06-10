@@ -118,8 +118,10 @@ describe('api client unauthorized handling', () => {
 
     await apiClient.getLesson('token', 'lesson-1');
 
-    const [, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/^http:\/\/localhost:4000\/api\/lessons\/lesson-1\?fresh=\d+$/);
     expect(init?.cache).toBe('no-store');
-    expect((init?.headers as Headers).get('Cache-Control')).toBe('no-cache');
+    expect((init?.headers as Headers).get('Cache-Control')).toBe('no-cache, no-store');
+    expect((init?.headers as Headers).get('Pragma')).toBe('no-cache');
   });
 });
