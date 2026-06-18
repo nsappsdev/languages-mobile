@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { setProgressSyncSession } from '@/src/features/progress/progress-sync';
 import { setVocabularyStatusSyncSession } from '@/src/features/vocabulary/services/vocabulary-status-sync';
+import { setVocabularyReviewSyncSession } from '@/src/features/vocabulary/services/vocabulary-review-sync';
 import {
   apiClient,
   ApiError,
@@ -272,6 +273,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       userId: user?.id ?? null,
     });
     void setVocabularyStatusSyncSession({
+      token,
+      userId: user?.id ?? null,
+    });
+    void setVocabularyReviewSyncSession({
       token,
       userId: user?.id ?? null,
     });

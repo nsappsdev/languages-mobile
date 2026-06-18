@@ -147,11 +147,30 @@ export interface LessonVocabularyReviewItem {
   lessonId: string;
   entryId: string;
   status: LearnerLessonVocabularyStatus;
+  correctStreak: number;
   rightSwipes: number;
   leftSwipes: number;
   lastReviewedAt: string | null;
   firstSeenAt: string | null;
   entry: VocabularyEntry;
+}
+
+export type VocabularyReviewDecision = 'AGAIN' | 'KNOW';
+
+export interface VocabularyLessonSummary {
+  lessonId: string;
+  title: string;
+  description: string | null;
+  activeCount: number;
+  learnedCount: number;
+}
+
+export interface VocabularyReviewEvent {
+  idempotencyKey: string;
+  lessonId: string;
+  entryId: string;
+  decision: VocabularyReviewDecision;
+  createdAt: string;
 }
 
 export type ProgressEventType = 'ITEM_STARTED' | 'ITEM_COMPLETED' | 'LESSON_COMPLETED';

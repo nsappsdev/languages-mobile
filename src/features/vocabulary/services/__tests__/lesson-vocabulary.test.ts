@@ -1,10 +1,10 @@
 import {
-  applyVocabularyReviewStatesToSections,
-  buildLessonVocabularySections,
+  applyPendingVocabularyReviews,
+  applyVocabularyReviewDecisionLocally,
+  buildLessonVocabularySection,
   findContextAudioRange,
   findWordAudioRange,
-  getNextVocabularyReviewStage,
-  shouldRevealVocabularyTranslation,
+  restoreVocabularyRow,
 } from '@/src/features/vocabulary/services/lesson-vocabulary';
 import type {
   LearnerLessonVocabularyStatus,
@@ -27,14 +27,7 @@ function createLesson(): Lesson {
         order: 1,
         text: 'Birds are flying high',
         audioUrl: '/audio/flying.mp3',
-        segments: [
-          {
-            id: 'segment-1',
-            text: 'Birds are flying high',
-            startMs: 0,
-            endMs: 1800,
-          },
-        ],
+        segments: [{ id: 'segment-1', text: 'Birds are flying high', startMs: 0, endMs: 1800 }],
         chunkTimings: [],
         sentenceTimings: [
           {
@@ -84,13 +77,15 @@ function createEntry(id: string, englishText: string, armenian?: string): Vocabu
 function createReviewItem(
   id: string,
   entry: VocabularyEntry,
-  status: LearnerLessonVocabularyStatus,
+  status: LearnerLessonVocabularyStatus = 'LEARNING',
+  correctStreak = 0,
 ): LessonVocabularyReviewItem {
   return {
     id: `learner-${id}`,
     lessonId: 'lesson-1',
     entryId: entry.id,
     status,
+    correctStreak,
     rightSwipes: 0,
     leftSwipes: 0,
     lastReviewedAt: null,
@@ -99,107 +94,97 @@ function createReviewItem(
   };
 }
 
-describe('lesson vocabulary sections', () => {
-  it('shows only saved unknown lesson terms with Armenian translations', () => {
-    const lesson = createLesson();
-    const flying = createEntry('entry-flying', 'flying', 'թռչում');
-    const birds = createEntry('entry-birds', 'Birds', 'թռչուններ');
-    const high = createEntry('entry-high', 'high');
+describe('lesson vocabulary review state', () => {
+  it('requires two know decisions and resets the streak after again', () => {
+    const row = createReviewItem(
+      'flying',
+      createEntry('entry-flying', 'flying', 'թռչում'),
+    );
+    const firstKnow = applyVocabularyReviewDecisionLocally(row, 'KNOW');
+    const secondKnow = applyVocabularyReviewDecisionLocally(firstKnow, 'KNOW');
+    const reset = applyVocabularyReviewDecisionLocally(firstKnow, 'AGAIN');
 
-    const sections = buildLessonVocabularySections({
-      lessons: [lesson],
-      reviewStates: [],
-      vocabularyByLessonId: {
-        'lesson-1': {
-          lessonId: 'lesson-1',
-          title: 'Flying',
-          description: null,
-          status: 'READY',
-          entries: [
-            createReviewItem('flying', flying, 'LEARNING'),
-            createReviewItem('birds', birds, 'NEW'),
-            createReviewItem('high', high, 'LEARNING'),
-          ],
-        },
-      },
-    });
-
-    expect(sections).toHaveLength(1);
-    expect(sections[0]?.items.map((item) => item.entry.englishText)).toEqual(['flying']);
+    expect(firstKnow).toMatchObject({ status: 'LEARNING', correctStreak: 1, rightSwipes: 1 });
+    expect(secondKnow).toMatchObject({ status: 'LEARNED', correctStreak: 2, rightSwipes: 2 });
+    expect(reset).toMatchObject({ status: 'LEARNING', correctStreak: 0, leftSwipes: 1 });
   });
 
-  it('uses local review state to remove finally learned terms', () => {
-    const lesson = createLesson();
-    const flying = createEntry('entry-flying', 'flying', 'թռչում');
-
-    const sections = buildLessonVocabularySections({
-      lessons: [lesson],
-      reviewStates: [
-        {
-          entryId: 'entry-flying',
-          lessonId: 'lesson-1',
-          pending: true,
-          stage: 'final_learned',
-          status: 'LEARNED',
-          updatedAt: '2026-05-25T00:00:00.000Z',
-        },
-      ],
-      vocabularyByLessonId: {
-        'lesson-1': {
-          lessonId: 'lesson-1',
-          title: 'Flying',
-          description: null,
-          status: 'READY',
-          entries: [createReviewItem('flying', flying, 'LEARNING')],
-        },
-      },
-    });
-
-    expect(sections).toEqual([]);
-  });
-
-  it('applies local review state over cached sections', () => {
-    const lesson = createLesson();
-    const flying = createEntry('entry-flying', 'flying', 'թռչում');
-    const sections = [
-      {
-        id: 'lesson-1',
-        lessonId: 'lesson-1',
-        title: 'Flying',
-        description: null,
-        lesson,
-        items: [createReviewItem('flying', flying, 'LEARNING')],
-      },
-    ];
+  it('applies queued decisions in order after an offline restart', () => {
+    const row = createReviewItem(
+      'flying',
+      createEntry('entry-flying', 'flying', 'թռչում'),
+    );
 
     expect(
-      applyVocabularyReviewStatesToSections(sections, [
-        {
-          entryId: 'entry-flying',
-          lessonId: 'lesson-1',
-          pending: true,
-          stage: 'final_learned',
-          status: 'LEARNED',
-          updatedAt: '2026-05-25T00:00:00.000Z',
-        },
-      ]),
-    ).toEqual([]);
+      applyPendingVocabularyReviews(
+        [row],
+        [
+          {
+            lessonId: 'lesson-1',
+            entryId: row.entryId,
+            decision: 'KNOW',
+            idempotencyKey: 'review-one',
+            createdAt: '2026-06-13T00:00:00.000Z',
+          },
+          {
+            lessonId: 'lesson-1',
+            entryId: row.entryId,
+            decision: 'KNOW',
+            idempotencyKey: 'review-two',
+            createdAt: '2026-06-13T00:00:01.000Z',
+          },
+        ],
+      )[0],
+    ).toMatchObject({ status: 'LEARNED', correctStreak: 2 });
+  });
+
+  it('restores a learned word with a clean streak', () => {
+    const learned = createReviewItem(
+      'flying',
+      createEntry('entry-flying', 'flying', 'թռչում'),
+      'LEARNED',
+      2,
+    );
+
+    expect(restoreVocabularyRow(learned)).toMatchObject({
+      status: 'LEARNING',
+      correctStreak: 0,
+    });
   });
 });
 
-describe('lesson vocabulary review stages', () => {
-  it('reveals translations only after learned decisions', () => {
-    expect(getNextVocabularyReviewStage(undefined, 'learned')).toBe('first_learned');
-    expect(getNextVocabularyReviewStage('first_learned', 'learned')).toBe('final_learned');
-    expect(getNextVocabularyReviewStage(undefined, 'not_learned')).toBe('first_missed');
-    expect(getNextVocabularyReviewStage('first_missed', 'not_learned')).toBe('final_missed');
-    expect(shouldRevealVocabularyTranslation('first_learned')).toBe(true);
-    expect(shouldRevealVocabularyTranslation('first_missed')).toBe(false);
+describe('lesson vocabulary data', () => {
+  it('keeps translated active and learned rows while excluding untranslated rows', () => {
+    const lesson = createLesson();
+    const active = createReviewItem(
+      'flying',
+      createEntry('entry-flying', 'flying', 'թռչում'),
+    );
+    const learned = createReviewItem(
+      'birds',
+      createEntry('entry-birds', 'Birds', 'թռչուններ'),
+      'LEARNED',
+      2,
+    );
+    const untranslated = createReviewItem('high', createEntry('entry-high', 'high'));
+
+    const section = buildLessonVocabularySection({
+      lesson,
+      payload: {
+        lessonId: lesson.id,
+        title: lesson.title,
+        description: null,
+        status: 'PUBLISHED',
+        entries: [active, learned, untranslated],
+      },
+    });
+
+    expect(section.items.map((item) => item.entry.englishText)).toEqual(['flying', 'Birds']);
   });
 });
 
 describe('lesson vocabulary audio ranges', () => {
-  it('finds the exact word audio timing', () => {
+  it('finds exact word and short-sentence context timings', () => {
     const lesson = createLesson();
     const entry = createEntry('entry-flying', 'flying', 'թռչում');
 
@@ -209,12 +194,6 @@ describe('lesson vocabulary audio ranges', () => {
       startMs: 800,
       endMs: 1150,
     });
-  });
-
-  it('uses the full sentence when context has fewer than seven words', () => {
-    const lesson = createLesson();
-    const entry = createEntry('entry-flying', 'flying', 'թռչում');
-
     expect(findContextAudioRange(lesson, entry)).toEqual({
       audioUrl: '/audio/flying.mp3',
       itemId: 'item-1',

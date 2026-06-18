@@ -1,5 +1,14 @@
 import { StyleSheet } from 'react-native';
-import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import {
+  border,
+  brand,
+  fontSize,
+  fontWeight,
+  neutral,
+  radii,
+  surface,
+  text,
+} from '@/src/shared/theme';
 
 export const styles = StyleSheet.create({
   center: {
@@ -9,7 +18,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   header: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   title: {
     color: text.primary,
@@ -20,6 +29,12 @@ export const styles = StyleSheet.create({
   meta: {
     color: text.secondary,
     fontSize: fontSize.md,
+    lineHeight: 20,
+  },
+  syncMeta: {
+    color: text.brand,
+    fontSize: fontSize.sm,
+    marginTop: 6,
   },
   error: {
     color: text.error,
@@ -29,22 +44,37 @@ export const styles = StyleSheet.create({
   retryButton: {
     backgroundColor: brand[700],
     borderRadius: radii.md,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   retryText: {
     color: neutral[0],
     fontWeight: fontWeight.semibold,
   },
-  syncMeta: {
-    color: text.brand,
-    fontSize: fontSize.sm,
-    marginTop: 6,
-  },
   summaryRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
+    marginTop: 14,
+  },
+  summaryCard: {
+    backgroundColor: surface.card,
+    borderColor: border.subtle,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  summaryValue: {
+    color: text.brand,
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+  },
+  summaryLabel: {
+    color: text.muted,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    marginTop: 2,
   },
   searchInput: {
     backgroundColor: surface.input,
@@ -52,150 +82,299 @@ export const styles = StyleSheet.create({
     borderRadius: radii.lg,
     borderWidth: 1,
     color: text.primary,
-    fontSize: 15,
+    fontSize: fontSize.md,
     marginBottom: 12,
+    minHeight: 48,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  summaryCard: {
-    alignItems: 'center',
-    backgroundColor: surface.card,
-    borderColor: border.subtle,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    flex: 1,
-    paddingVertical: 10,
-  },
-  summaryValue: {
-    color: text.brand,
-    fontSize: fontSize.xl,
-    fontWeight: fontWeight.bold,
-  },
-  summaryLabel: {
-    color: text.muted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
   },
   listContent: {
-    gap: 12,
+    gap: 10,
     paddingBottom: 24,
   },
-  sectionCard: {
+  lessonCard: {
+    alignItems: 'center',
     backgroundColor: surface.card,
     borderColor: border.default,
     borderRadius: radii['2xl'],
     borderWidth: 1,
-    gap: 10,
-    padding: 14,
-  },
-  sectionHeadingCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  sectionHeadingCopyPressed: {
-    opacity: 0.7,
-  },
-  sectionTitleRow: {
-    alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    minHeight: 76,
+    padding: 16,
   },
-  sectionChevron: {
-    color: text.muted,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.bold,
+  lessonCardCopy: {
+    flex: 1,
+    gap: 4,
   },
-  sectionTitle: {
+  lessonTitle: {
     color: text.primary,
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
   },
-  sectionMeta: {
-    color: text.muted,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
-  },
-  sectionDescription: {
+  lessonMeta: {
     color: text.secondary,
     fontSize: fontSize.base,
-    lineHeight: 18,
   },
-  sectionEntries: {
-    gap: 8,
-  },
-  dictionaryRow: {
-    backgroundColor: surface.page,
-    borderColor: border.subtle,
-    borderRadius: radii.lg,
+  archiveButton: {
+    alignItems: 'center',
+    backgroundColor: brand[50],
+    borderColor: brand[200],
+    borderRadius: radii['2xl'],
     borderWidth: 1,
-    gap: 10,
-    padding: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    padding: 16,
   },
-  dictionaryRowPressed: {
-    opacity: 0.85,
+  archiveButtonTitle: {
+    color: text.brand,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
   },
-  dictionaryRowFirstMissed: {
-    backgroundColor: '#fef2f2',
-    borderColor: '#fecaca',
+  archiveButtonMeta: {
+    color: text.secondary,
+    fontSize: fontSize.sm,
+    marginTop: 2,
   },
-  dictionaryRowFirstLearned: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#bfdbfe',
+  buttonPressed: {
+    opacity: 0.72,
   },
-  dictionaryRowFinalMissed: {
-    backgroundColor: '#991b1b',
-    borderColor: '#7f1d1d',
+  viewRoot: {
+    flex: 1,
   },
-  dictionaryRowFinalLearned: {
-    backgroundColor: '#1d4ed8',
-    borderColor: '#1e40af',
+  viewHeader: {
+    marginBottom: 14,
+  },
+  backButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 2,
+    marginBottom: 10,
+    minHeight: 36,
+  },
+  backButtonText: {
+    color: text.brand,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  lessonViewTitle: {
+    color: text.primary,
+    fontSize: fontSize['3xl'],
+    fontWeight: fontWeight.bold,
+    marginBottom: 4,
+  },
+  progressTrack: {
+    backgroundColor: neutral[200],
+    borderRadius: radii.full,
+    height: 7,
+    marginTop: 14,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    backgroundColor: brand[600],
+    borderRadius: radii.full,
+    height: '100%',
+  },
+  progressText: {
+    color: text.secondary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    marginTop: 6,
+  },
+  reviewList: {
+    gap: 12,
+    paddingBottom: 24,
+  },
+  reviewRow: {
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['2xl'],
+    borderWidth: 1,
+    padding: 14,
+  },
+  reviewRowRevealed: {
+    borderColor: brand[300],
+    boxShadow: '0px 5px 16px rgba(8, 145, 178, 0.12)',
   },
   dictionaryTextRow: {
-    alignItems: 'center',
+    alignItems: 'stretch',
     flexDirection: 'row',
-    minHeight: 44,
+    minHeight: 64,
+  },
+  reviewColumn: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  columnLabel: {
+    color: text.muted,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.semibold,
+    marginBottom: 5,
+    textTransform: 'uppercase',
   },
   dictionaryEnglish: {
     color: text.primary,
-    flex: 1,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
-    lineHeight: 21,
-    paddingRight: 10,
+    lineHeight: 22,
   },
   dictionaryDivider: {
     alignSelf: 'stretch',
-    backgroundColor: '#dbeafe',
-    marginHorizontal: 4,
+    backgroundColor: border.default,
     width: 1,
   },
-  dictionaryTranslationWrap: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingLeft: 10,
+  translationReveal: {
+    borderRadius: radii.md,
   },
   dictionaryTranslation: {
     color: text.brand,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
-    lineHeight: 21,
-  },
-  dictionaryTranslationInvisible: {
-    opacity: 0,
-    position: 'absolute',
+    lineHeight: 22,
   },
   dictionaryTranslationHidden: {
-    color: neutral[400],
-    fontSize: fontSize.lg,
+    color: neutral[300],
+    fontSize: 13,
+    letterSpacing: 1,
+    lineHeight: 22,
+  },
+  rowFooter: {
+    alignItems: 'center',
+    borderTopColor: border.subtle,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    paddingTop: 10,
+  },
+  audioActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  iconAction: {
+    alignItems: 'center',
+    backgroundColor: brand[50],
+    borderRadius: radii.full,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  streakText: {
+    color: text.secondary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  decisionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  againButton: {
+    alignItems: 'center',
+    backgroundColor: '#fff7ed',
+    borderColor: '#fed7aa',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 46,
+    justifyContent: 'center',
+  },
+  againButtonText: {
+    color: '#c2410c',
+    fontSize: fontSize.md,
     fontWeight: fontWeight.bold,
-    letterSpacing: 0,
-    lineHeight: 21,
   },
-  dictionaryTextOnDark: {
-    color: text.inverse,
+  knowButton: {
+    alignItems: 'center',
+    backgroundColor: brand[700],
+    borderRadius: radii.lg,
+    flex: 1,
+    minHeight: 46,
+    justifyContent: 'center',
   },
-  dictionaryHiddenTextOnDark: {
-    color: 'rgba(255, 255, 255, 0.72)',
+  knowButtonText: {
+    color: neutral[0],
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+  },
+  completionCard: {
+    alignItems: 'center',
+    backgroundColor: surface.card,
+    borderColor: brand[200],
+    borderRadius: radii['2xl'],
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 28,
+    padding: 24,
+  },
+  completionTitle: {
+    color: text.primary,
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  primaryAction: {
+    alignItems: 'center',
+    backgroundColor: brand[700],
+    borderRadius: radii.lg,
+    marginTop: 8,
+    minHeight: 46,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
+  },
+  primaryActionText: {
+    color: neutral[0],
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.bold,
+  },
+  archiveList: {
+    gap: 12,
+    paddingBottom: 24,
+  },
+  archiveSection: {
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['2xl'],
+    borderWidth: 1,
+    gap: 2,
+    padding: 14,
+  },
+  archiveSectionTitle: {
+    color: text.primary,
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    marginBottom: 6,
+  },
+  archiveRow: {
+    alignItems: 'center',
+    borderTopColor: border.subtle,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  archiveRowCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  archiveTranslation: {
+    color: text.brand,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  restoreButton: {
+    backgroundColor: brand[50],
+    borderColor: brand[200],
+    borderRadius: radii.md,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  restoreButtonText: {
+    color: text.brand,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.bold,
   },
   emptyCard: {
     alignItems: 'center',
@@ -203,17 +382,25 @@ export const styles = StyleSheet.create({
     borderColor: border.default,
     borderRadius: radii.lg,
     borderWidth: 1,
-    padding: 16,
+    padding: 18,
   },
   emptyTitle: {
     color: text.primary,
     fontSize: fontSize.lg,
     fontWeight: fontWeight.bold,
     marginBottom: 4,
+    textAlign: 'center',
   },
   emptyText: {
     color: text.secondary,
     fontSize: fontSize.base,
+    lineHeight: 20,
     textAlign: 'center',
+  },
+  loadingView: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+    justifyContent: 'center',
   },
 });

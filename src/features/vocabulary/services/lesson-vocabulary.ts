@@ -6,27 +6,11 @@ import type {
   LessonItem,
   LessonVocabularyReviewItem,
   VocabularyEntry,
+  VocabularyReviewDecision,
+  VocabularyReviewEvent,
 } from '@/src/types/domain';
 
-export type VocabularyReviewDecision = 'learned' | 'not_learned';
-export type VocabularyReviewStage =
-  | 'first_missed'
-  | 'first_learned'
-  | 'final_missed'
-  | 'final_learned';
-
-export type LessonVocabularyReviewState = {
-  entryId: string;
-  lessonId: string;
-  pending: boolean;
-  stage: VocabularyReviewStage;
-  status: LearnerLessonVocabularyStatus;
-  updatedAt: string;
-};
-
-export type LessonVocabularyRow = LessonVocabularyReviewItem & {
-  localStage?: VocabularyReviewStage;
-};
+export type LessonVocabularyRow = LessonVocabularyReviewItem;
 
 export type LessonVocabularySection = {
   description: string | null;
@@ -52,140 +36,87 @@ export type LessonVocabularyPayload = {
   title: string;
 };
 
-export function buildLessonVocabularySections({
-  lessons,
-  reviewStates,
-  searchQuery = '',
-  vocabularyByLessonId,
+export function buildLessonVocabularySection({
+  lesson,
+  payload,
+  pendingDecisions = [],
 }: {
-  lessons: Lesson[];
-  reviewStates: LessonVocabularyReviewState[];
-  searchQuery?: string;
-  vocabularyByLessonId: Record<string, LessonVocabularyPayload | undefined>;
-}): LessonVocabularySection[] {
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const stateByEntryId = new Map(reviewStates.map((state) => [state.entryId, state]));
-
-  return lessons
-    .map((lesson) => {
-      const payload = vocabularyByLessonId[lesson.id];
-      const items = (payload?.entries ?? [])
-        .map((item): LessonVocabularyRow | null => {
-          const localState = stateByEntryId.get(item.entryId);
-          const status = localState?.status ?? item.status;
-          const stage = localState?.stage;
-
-          if (status === 'LEARNED' || stage === 'final_learned') {
-            return null;
-          }
-          if (status !== 'LEARNING') {
-            return null;
-          }
-          if (!pickArmenianTranslationText(item.entry.translations)) {
-            return null;
-          }
-          if (normalizedQuery && !matchesVocabularySearch(item, normalizedQuery)) {
-            return null;
-          }
-
-          return {
-            ...item,
-            status,
-            localStage: stage,
-          };
-        })
-        .filter((item): item is LessonVocabularyRow => Boolean(item));
-
-      if (!items.length) {
-        return null;
-      }
-
-      return {
-        description: payload?.description ?? lesson.description ?? null,
-        id: lesson.id,
-        items,
-        lesson,
-        lessonId: lesson.id,
-        title: payload?.title ?? lesson.title,
-      };
-    })
-    .filter((section): section is LessonVocabularySection => Boolean(section));
-}
-
-export function applyVocabularyReviewStatesToSections(
-  sections: LessonVocabularySection[],
-  reviewStates: LessonVocabularyReviewState[],
-): LessonVocabularySection[] {
-  const stateByEntryId = new Map(reviewStates.map((state) => [state.entryId, state]));
-
-  return sections
-    .map((section) => ({
-      ...section,
-      items: section.items
-        .map((item): LessonVocabularyRow | null => {
-          const localState = stateByEntryId.get(item.entryId);
-          const status = localState?.status ?? item.status;
-          const stage = localState?.stage ?? item.localStage;
-
-          if (status === 'LEARNED' || stage === 'final_learned') {
-            return null;
-          }
-
-          return {
-            ...item,
-            status,
-            localStage: stage,
-          };
-        })
-        .filter((item): item is LessonVocabularyRow => Boolean(item)),
-    }))
-    .filter((section) => section.items.length > 0);
-}
-
-export function getNextVocabularyReviewState({
-  currentStage,
-  decision,
-  entryId,
-  lessonId,
-}: {
-  currentStage?: VocabularyReviewStage;
-  decision: VocabularyReviewDecision;
-  entryId: string;
-  lessonId: string;
-}): LessonVocabularyReviewState {
-  const stage = getNextVocabularyReviewStage(currentStage, decision);
+  lesson: Lesson;
+  payload: LessonVocabularyPayload;
+  pendingDecisions?: VocabularyReviewEvent[];
+}): LessonVocabularySection {
   return {
-    entryId,
-    lessonId,
-    pending: true,
-    stage,
-    status: stage === 'final_learned' ? 'LEARNED' : 'LEARNING',
-    updatedAt: new Date().toISOString(),
+    description: payload.description ?? lesson.description ?? null,
+    id: lesson.id,
+    items: applyPendingVocabularyReviews(payload.entries, pendingDecisions).filter(
+      (item) => Boolean(pickArmenianTranslationText(item.entry.translations)),
+    ),
+    lesson,
+    lessonId: lesson.id,
+    title: payload.title ?? lesson.title,
   };
 }
 
-export function getNextVocabularyReviewStage(
-  currentStage: VocabularyReviewStage | undefined,
+export function applyVocabularyReviewDecisionLocally(
+  row: LessonVocabularyRow,
   decision: VocabularyReviewDecision,
-): VocabularyReviewStage {
-  if (decision === 'not_learned') {
-    return currentStage ? 'final_missed' : 'first_missed';
+): LessonVocabularyRow {
+  if (decision === 'AGAIN') {
+    return {
+      ...row,
+      status: 'LEARNING',
+      correctStreak: 0,
+      leftSwipes: row.leftSwipes + 1,
+    };
   }
-  return currentStage ? 'final_learned' : 'first_learned';
+
+  const correctStreak = Math.min(2, row.correctStreak + 1);
+  return {
+    ...row,
+    status: correctStreak >= 2 ? 'LEARNED' : 'LEARNING',
+    correctStreak,
+    rightSwipes: row.rightSwipes + 1,
+  };
 }
 
-export function shouldRevealVocabularyTranslation(stage?: VocabularyReviewStage) {
-  return stage === 'first_learned' || stage === 'final_learned';
+export function applyPendingVocabularyReviews(
+  rows: LessonVocabularyRow[],
+  events: VocabularyReviewEvent[],
+) {
+  const rowsById = new Map(rows.map((row) => [row.entryId, row]));
+  events.forEach((event) => {
+    const current = rowsById.get(event.entryId);
+    if (!current || current.lessonId !== event.lessonId || current.status !== 'LEARNING') {
+      return;
+    }
+    rowsById.set(event.entryId, applyVocabularyReviewDecisionLocally(current, event.decision));
+  });
+  return rows.map((row) => rowsById.get(row.entryId) ?? row);
 }
 
-export function shuffleVocabularyRows<T extends { entryId: string }>(items: T[], seed = Date.now()) {
-  return [...items]
-    .map((item, index) => ({
-      item,
-      sort: seededSortValue(`${seed}:${item.entryId}:${index}`),
-    }))
-    .sort((left, right) => left.sort - right.sort)
-    .map(({ item }) => item);
+export function restoreVocabularyRow(row: LessonVocabularyRow): LessonVocabularyRow {
+  return {
+    ...row,
+    status: 'LEARNING',
+    correctStreak: 0,
+  };
+}
+
+export function createVocabularyReviewIdempotencyKey(
+  lessonId: string,
+  entryId: string,
+  decision: VocabularyReviewDecision,
+) {
+  return `vocabulary:${decision}:${lessonId}:${entryId}:${Date.now()}:${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+}
+
+export function countVocabularyByStatus(
+  items: LessonVocabularyRow[],
+  status: LearnerLessonVocabularyStatus,
+) {
+  return items.filter((item) => item.status === status).length;
 }
 
 export function findWordAudioRange(
@@ -307,22 +238,4 @@ function findContainingSentenceRange(item: LessonItem, wordTimingIndex: number) 
     endMs: contextWords[contextWords.length - 1].endMs,
     startMs: contextWords[0].startMs,
   };
-}
-
-function matchesVocabularySearch(item: LessonVocabularyReviewItem, normalizedQuery: string) {
-  const english = item.entry.englishText.toLowerCase();
-  const translations = item.entry.translations.map((translation) =>
-    translation.translation.toLowerCase(),
-  );
-
-  return english.includes(normalizedQuery) || translations.some((value) => value.includes(normalizedQuery));
-}
-
-function seededSortValue(value: string) {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) / 4294967295;
 }

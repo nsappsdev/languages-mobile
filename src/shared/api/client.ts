@@ -4,6 +4,8 @@ import type {
   LearnerVocabularyItem,
   LearnerVocabularyStatus,
   LessonVocabularyReviewItem,
+  VocabularyLessonSummary,
+  VocabularyReviewDecision,
   Lesson,
   LoginResponse,
   AppSettings,
@@ -363,6 +365,30 @@ export const apiClient = {
       method: 'GET',
       token,
     });
+  },
+
+  getVocabularyLessonSummaries(token: string) {
+    return request<{ lessons: VocabularyLessonSummary[] }>('/me/vocabulary/lessons', {
+      method: 'GET',
+      token,
+    });
+  },
+
+  reviewLessonVocabulary(
+    token: string,
+    lessonId: string,
+    entryId: string,
+    decision: VocabularyReviewDecision,
+    idempotencyKey: string,
+  ) {
+    return request<{ review: LessonVocabularyReviewItem }>(
+      `/me/lessons/${lessonId}/vocabulary/${entryId}/review`,
+      {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ decision, idempotencyKey }),
+      },
+    );
   },
 
   updateLessonVocabularyStatus(
