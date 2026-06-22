@@ -27,6 +27,7 @@ export function VocabularyScreen() {
   const { token, user } = useSession();
   const userId = user?.id;
   const [view, setView] = useState<VocabularyView>('dashboard');
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const player = useAudioPlayer(undefined, { updateInterval: 100 });
   const audioSourceRef = useRef<string | null>(null);
   const audioStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,6 +98,7 @@ export function VocabularyScreen() {
 
   const backToDashboard = () => {
     setSelectedSection(null);
+    setSelectedLessonId(null);
     setView('dashboard');
     void fetchSummaries(true);
   };
@@ -149,6 +151,7 @@ export function VocabularyScreen() {
             }}
             onOpenLesson={(lessonId) => {
               setSelectedSection(null);
+              setSelectedLessonId(lessonId);
               setView('lesson');
               void openLesson(lessonId);
             }}
@@ -167,8 +170,16 @@ export function VocabularyScreen() {
             onReview={reviewWord}
             section={selectedSection}
           />
-        ) : (
+        ) : isLoadingView ? (
           <LoadingView onBack={backToDashboard} text="Loading lesson vocabulary..." />
+        ) : (
+          <LessonLoadError
+            error={error ?? 'Failed to load lesson vocabulary.'}
+            onBack={backToDashboard}
+            onRetry={() => {
+              if (selectedLessonId) void openLesson(selectedLessonId);
+            }}
+          />
         )
       ) : null}
 
@@ -195,6 +206,28 @@ function LoadingView({ onBack, text }: { onBack: () => void; text: string }) {
       </Pressable>
       <ActivityIndicator size="large" />
       <Text style={styles.meta}>{text}</Text>
+    </View>
+  );
+}
+
+function LessonLoadError({
+  error,
+  onBack,
+  onRetry,
+}: {
+  error: string;
+  onBack: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <View style={styles.loadingView}>
+      <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
+        <Text style={styles.backButtonText}>Back</Text>
+      </Pressable>
+      <Text style={styles.error}>{error}</Text>
+      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retryButton}>
+        <Text style={styles.retryText}>Retry</Text>
+      </Pressable>
     </View>
   );
 }

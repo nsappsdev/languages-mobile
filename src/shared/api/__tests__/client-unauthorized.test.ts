@@ -1,4 +1,5 @@
 import {
+  API_REQUEST_TIMEOUT_MS,
   apiClient,
   setApiAuthRefreshHandler,
   setApiUnauthorizedHandler,
@@ -29,6 +30,7 @@ describe('api client unauthorized handling', () => {
   });
 
   afterEach(() => {
+    jest.useRealTimers();
     setApiAuthRefreshHandler(null);
     setApiUnauthorizedHandler(null);
   });
@@ -123,5 +125,28 @@ describe('api client unauthorized handling', () => {
     expect(init?.cache).toBe('no-store');
     expect((init?.headers as Headers).get('Cache-Control')).toBe('no-cache, no-store');
     expect((init?.headers as Headers).get('Pragma')).toBe('no-cache');
+  });
+
+  it('fails a stalled native request with a retryable timeout error', async () => {
+    jest.useFakeTimers();
+    fetchMock.mockImplementationOnce(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')), {
+            once: true,
+          });
+        }),
+    );
+
+    const response = apiClient.getVocabularyLessonSummaries('token');
+    jest.advanceTimersByTime(API_REQUEST_TIMEOUT_MS);
+
+    await expect(response).rejects.toEqual(
+      expect.objectContaining({
+        code: 'TIMEOUT',
+        status: 0,
+        message: 'Request timed out. Check your connection and try again.',
+      }),
+    );
   });
 });

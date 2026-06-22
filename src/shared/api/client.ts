@@ -38,6 +38,8 @@ type RequestOptions = RequestInit & {
   token?: string | null;
 };
 
+export const API_REQUEST_TIMEOUT_MS = 20_000;
+
 type AuthRefreshHandler = (
   staleToken: string,
   error: ApiError,
@@ -60,6 +62,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   const execute = async (currentToken: string | null, allowRefresh: boolean): Promise<T> => {
     const headers = new Headers(init.headers);
+    const controller = new AbortController();
+    const upstreamSignal = init.signal;
+    let timedOut = false;
+    const abortFromUpstream = () => controller.abort();
+
+    if (upstreamSignal?.aborted) {
+      abortFromUpstream();
+    } else {
+      upstreamSignal?.addEventListener('abort', abortFromUpstream, { once: true });
+    }
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, API_REQUEST_TIMEOUT_MS);
 
     if (currentToken) {
       headers.set('Authorization', `Bearer ${currentToken}`);
@@ -75,12 +91,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       response = await fetch(`${API_BASE_URL}${path}`, {
         ...init,
         headers,
+        signal: controller.signal,
       });
     } catch {
+      if (timedOut) {
+        throw new ApiError('Request timed out. Check your connection and try again.', 0, 'TIMEOUT');
+      }
       throw new ApiError(
         `Network request failed. Cannot reach ${API_BASE_URL}. Ensure backend is running and reachable from this device.`,
         0,
       );
+    } finally {
+      clearTimeout(timeout);
+      upstreamSignal?.removeEventListener('abort', abortFromUpstream);
     }
 
     const text = await response.text();
