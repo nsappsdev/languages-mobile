@@ -1,13 +1,12 @@
 import type { LessonVocabularySection } from '@/src/features/vocabulary/services/lesson-vocabulary';
+import {
+  resolveWebStorage,
+  type StorageLike,
+} from '@/src/shared/storage/web-storage';
 import type { VocabularyLessonSummary } from '@/src/types/domain';
 
 const SECTION_STORAGE_KEY_PREFIX = 'language-lesson-vocabulary-sections-v2';
 const SUMMARY_STORAGE_KEY_PREFIX = 'language-vocabulary-lesson-summaries-v1';
-
-type StorageLike = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
-};
 
 const memoryFallbackStore = new Map<string, string>();
 const sectionRuntimeCache = new Map<string, LessonVocabularySection[]>();
@@ -15,25 +14,13 @@ const summaryRuntimeCache = new Map<string, VocabularyLessonSummary[]>();
 const storage = resolveStorage();
 
 function resolveStorage(): StorageLike {
-  if (typeof window !== 'undefined') {
-    try {
-      const webStorage = window.localStorage;
-      return {
-        async getItem(key: string) {
-          return webStorage.getItem(key);
-        },
-        async setItem(key: string, value: string) {
-          webStorage.setItem(key, value);
-        },
-      };
-    } catch {
-      // Fall through to native or memory storage.
-    }
-  }
+  const webStorage = resolveWebStorage();
+  if (webStorage) return webStorage;
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asyncStorage = require('@react-native-async-storage/async-storage').default;
+    const asyncStorageModule = require('@react-native-async-storage/async-storage');
+    const asyncStorage = asyncStorageModule.default ?? asyncStorageModule;
     if (asyncStorage?.getItem && asyncStorage?.setItem) {
       return asyncStorage as StorageLike;
     }

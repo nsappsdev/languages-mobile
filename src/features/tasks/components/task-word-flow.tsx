@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, Text, View } from 'react-native';
 import { TOKEN_WORD_HORIZONTAL_PADDING } from '@/src/features/tasks/constants/task-runner';
 import { fitTranslationLabel } from '@/src/features/tasks/services/translation-fitting';
@@ -8,12 +8,14 @@ import {
   getTranslationLabelMaxWidth,
 } from '@/src/features/tasks/services/task-word-flow-layout';
 import {
+  getVocabularyTapAction,
   getTokenTranslationDisplay,
-  shouldAllowVocabularyToggle,
   shouldRevealTokenTranslation,
 } from '@/src/features/tasks/services/token-translation-display';
 import { wordFlowStyles } from '@/src/features/tasks/components/task-word-flow.styles';
 import type { TaskWordFlowProps } from '@/src/features/tasks/components/task-word-flow.types';
+
+const NO_TRANSLATION_FEEDBACK_MS = 1200;
 
 export const TaskWordFlow = memo(function TaskWordFlow({
   activeSegmentId,
@@ -41,6 +43,38 @@ export const TaskWordFlow = memo(function TaskWordFlow({
   wordTokens,
 }: TaskWordFlowProps) {
   const [wordFlowWidth, setWordFlowWidth] = useState(0);
+  const [missingTranslationFeedback, setMissingTranslationFeedback] = useState<
+    Record<string, true>
+  >({});
+  const missingTranslationTimers = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>(),
+  );
+
+  const showMissingTranslationFeedback = useCallback((normalizedWord: string) => {
+    const currentTimer = missingTranslationTimers.current.get(normalizedWord);
+    if (currentTimer) clearTimeout(currentTimer);
+    setMissingTranslationFeedback((current) => ({ ...current, [normalizedWord]: true }));
+    missingTranslationTimers.current.set(
+      normalizedWord,
+      setTimeout(() => {
+        missingTranslationTimers.current.delete(normalizedWord);
+        setMissingTranslationFeedback((current) => {
+          if (!current[normalizedWord]) return current;
+          const next = { ...current };
+          delete next[normalizedWord];
+          return next;
+        });
+      }, NO_TRANSLATION_FEEDBACK_MS),
+    );
+  }, []);
+
+  useEffect(
+    () => () => {
+      missingTranslationTimers.current.forEach(clearTimeout);
+      missingTranslationTimers.current.clear();
+    },
+    [],
+  );
 
   return (
     <View
@@ -93,8 +127,15 @@ export const TaskWordFlow = memo(function TaskWordFlow({
           vocabularyByText[normalizedWord]?.entry.translations ??
           entry?.translations ??
           [];
-        const tokenTranslation = shouldRenderTranslation
-          ? getTokenTranslationDisplay(translationsForToken, revealTranslation, matchedTokenText)
+        const hasArmenianTranslation = translationsForToken.some((translation) =>
+          ['am', 'hy'].includes(translation.languageCode.toLowerCase()),
+        );
+        const showMissingIndicator =
+          shouldRenderTranslation && Boolean(missingTranslationFeedback[normalizedWord]);
+        const tokenTranslation = showMissingIndicator
+          ? { hasTranslation: false, text: '∅', visible: true }
+          : shouldRenderTranslation
+            ? getTokenTranslationDisplay(translationsForToken, revealTranslation, matchedTokenText)
           : getTokenTranslationDisplay([], false);
         const measuredTokenWidth = tokenWidths[tok.key] ?? 0;
         const fallbackTokenWidth = Math.ceil(
@@ -136,17 +177,17 @@ export const TaskWordFlow = memo(function TaskWordFlow({
                 handleSeekToSegment(segmentStartMs);
                 return;
               }
-              if (
-                !shouldAllowVocabularyToggle(
-                  Boolean(vocabularyByText[normalizedWord] || entry),
-                  translationsForToken.some(
-                    (translation) => ['am', 'hy'].includes(translation.languageCode.toLowerCase()),
-                  ),
-                )
-              ) {
+              const tapAction = getVocabularyTapAction(
+                isSelected,
+                Boolean(vocabularyByText[normalizedWord] || entry),
+                hasArmenianTranslation,
+              );
+              if (tapAction === 'ignore') return;
+              triggerTokenFeedback(normalizedWord);
+              if (tapAction === 'show-missing-translation') {
+                showMissingTranslationFeedback(normalizedWord);
                 return;
               }
-              triggerTokenFeedback(normalizedWord);
               handleToggleWordVocabulary(matchedTokenText, normalizedWord);
             }}
             disabled={isPlaying && segmentStartMs === null}
@@ -162,7 +203,7 @@ export const TaskWordFlow = memo(function TaskWordFlow({
                 style={[
                   wordFlowStyles.tokenTranslation,
                   {
-                    fontFamily: translationFontFamily,
+                    fontFamily: showMissingIndicator ? undefined : translationFontFamily,
                     fontSize: fittedTranslation.fontSize,
                     letterSpacing: fittedTranslation.letterSpacing,
                     lineHeight: translationLineHeight,
@@ -192,6 +233,7 @@ export const TaskWordFlow = memo(function TaskWordFlow({
                   isSelected && wordFlowStyles.tokenWordSaved,
                   revealTranslation && !isSelected && wordFlowStyles.tokenWordUnknown,
                   shouldRenderTranslation &&
+                    !showMissingIndicator &&
                     tokenTranslation.visible &&
                     !tokenTranslation.hasTranslation &&
                     wordFlowStyles.tokenWordUnknown,

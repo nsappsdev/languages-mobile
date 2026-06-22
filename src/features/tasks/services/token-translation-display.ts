@@ -7,6 +7,8 @@ export interface TokenTranslationDisplay {
   visible: boolean;
 }
 
+export type VocabularyTapAction = 'ignore' | 'show-missing-translation' | 'toggle';
+
 export function shouldRevealTokenTranslation(
   hasVocabularyEntry: boolean,
   isMarkedUnknown: boolean,
@@ -14,11 +16,13 @@ export function shouldRevealTokenTranslation(
   return hasVocabularyEntry || isMarkedUnknown;
 }
 
-export function shouldAllowVocabularyToggle(
+export function getVocabularyTapAction(
+  isSelected: boolean,
   hasVocabularyEntry: boolean,
   hasArmenianTranslation: boolean,
-): boolean {
-  return hasVocabularyEntry || hasArmenianTranslation;
+): VocabularyTapAction {
+  if (isSelected || hasArmenianTranslation) return 'toggle';
+  return hasVocabularyEntry ? 'show-missing-translation' : 'ignore';
 }
 
 export function getTokenTranslationDisplay(

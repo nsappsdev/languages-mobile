@@ -1,4 +1,5 @@
 import {
+  getVocabularyTapAction,
   getTokenTranslationDisplay,
   shouldRevealTokenTranslation,
 } from '../token-translation-display';
@@ -56,5 +57,23 @@ describe('shouldRevealTokenTranslation', () => {
 
   it('keeps unsaved words hidden until marked unknown', () => {
     expect(shouldRevealTokenTranslation(false, false)).toBe(false);
+  });
+});
+
+describe('getVocabularyTapAction', () => {
+  it('shows missing-translation feedback without saving an untranslated entry', () => {
+    expect(getVocabularyTapAction(false, true, false)).toBe('show-missing-translation');
+  });
+
+  it('allows translated entries to be toggled', () => {
+    expect(getVocabularyTapAction(false, true, true)).toBe('toggle');
+  });
+
+  it('allows an already selected untranslated entry to be removed', () => {
+    expect(getVocabularyTapAction(true, true, false)).toBe('toggle');
+  });
+
+  it('ignores text with no vocabulary entry', () => {
+    expect(getVocabularyTapAction(false, false, false)).toBe('ignore');
   });
 });

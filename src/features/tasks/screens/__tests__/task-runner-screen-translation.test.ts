@@ -1,6 +1,6 @@
 import {
   getTokenTranslationDisplay,
-  shouldAllowVocabularyToggle,
+  getVocabularyTapAction,
 } from '@/src/features/tasks/services/token-translation-display';
 
 describe('task runner translation display', () => {
@@ -25,11 +25,10 @@ describe('task runner translation display', () => {
 
 describe('task runner tap behavior', () => {
   it('ignores words with no vocabulary entry and no Armenian translation', () => {
-    expect(shouldAllowVocabularyToggle(false, false)).toBe(false);
+    expect(getVocabularyTapAction(false, false, false)).toBe('ignore');
   });
 
-  it('allows vocabulary entries to be marked unknown even before Armenian translation is added', () => {
-    expect(shouldAllowVocabularyToggle(true, false)).toBe(true);
+  it('shows temporary feedback instead of marking untranslated entries unknown', () => {
+    expect(getVocabularyTapAction(false, true, false)).toBe('show-missing-translation');
   });
-
 });

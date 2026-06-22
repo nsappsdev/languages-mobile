@@ -1,5 +1,9 @@
 import { AppState } from 'react-native';
 import { apiClient } from '@/src/shared/api/client';
+import {
+  resolveWebStorage,
+  type StorageLike,
+} from '@/src/shared/storage/web-storage';
 import type { VocabularyReviewEvent } from '@/src/types/domain';
 
 const STORAGE_KEY_PREFIX = 'language-vocabulary-review-events-v1';
@@ -8,11 +12,6 @@ type SyncResult = {
   ok: boolean;
   pending: number;
   message?: string;
-};
-
-type StorageLike = {
-  getItem: (key: string) => Promise<string | null>;
-  setItem: (key: string, value: string) => Promise<void>;
 };
 
 let queue: VocabularyReviewEvent[] = [];
@@ -25,25 +24,13 @@ const memoryFallbackStore = new Map<string, string>();
 const storage = resolveStorage();
 
 function resolveStorage(): StorageLike {
-  if (typeof window !== 'undefined') {
-    try {
-      const webStorage = window.localStorage;
-      return {
-        async getItem(key: string) {
-          return webStorage.getItem(key);
-        },
-        async setItem(key: string, value: string) {
-          webStorage.setItem(key, value);
-        },
-      };
-    } catch {
-      // Fall through to native or memory storage.
-    }
-  }
+  const webStorage = resolveWebStorage();
+  if (webStorage) return webStorage;
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const asyncStorage = require('@react-native-async-storage/async-storage').default;
+    const asyncStorageModule = require('@react-native-async-storage/async-storage');
+    const asyncStorage = asyncStorageModule.default ?? asyncStorageModule;
     if (asyncStorage?.getItem && asyncStorage?.setItem) {
       return asyncStorage as StorageLike;
     }
