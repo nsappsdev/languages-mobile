@@ -21,8 +21,8 @@ export function getVocabularyTapAction(
   hasVocabularyEntry: boolean,
   hasArmenianTranslation: boolean,
 ): VocabularyTapAction {
-  if (isSelected || hasArmenianTranslation) return 'toggle';
-  return hasVocabularyEntry ? 'show-missing-translation' : 'ignore';
+  if (!hasArmenianTranslation) return 'show-missing-translation';
+  return isSelected || hasVocabularyEntry ? 'toggle' : 'ignore';
 }
 
 export function getTokenTranslationDisplay(

@@ -24,8 +24,8 @@ describe('task runner translation display', () => {
 });
 
 describe('task runner tap behavior', () => {
-  it('ignores words with no vocabulary entry and no Armenian translation', () => {
-    expect(getVocabularyTapAction(false, false, false)).toBe('ignore');
+  it('shows missing-translation feedback for words with no vocabulary entry and no Armenian translation', () => {
+    expect(getVocabularyTapAction(false, false, false)).toBe('show-missing-translation');
   });
 
   it('shows temporary feedback instead of marking untranslated entries unknown', () => {

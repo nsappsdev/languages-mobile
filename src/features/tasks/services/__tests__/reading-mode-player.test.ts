@@ -71,4 +71,17 @@ describe('reading mode player', () => {
     expect(player.pause).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
   });
+
+  it('does not pause playback when the range is cancelled by a newer run', async () => {
+    let cancelled = false;
+    const player = new FakePlayer();
+    const result = playUntilPosition({ endMs: 1000, isCancelled: () => cancelled, player });
+
+    cancelled = true;
+    player.emit({ currentTime: 0.4, isBuffering: false });
+
+    await expect(result).resolves.toBe(false);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(player.pause).not.toHaveBeenCalled();
+  });
 });

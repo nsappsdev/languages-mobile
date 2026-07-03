@@ -19,6 +19,7 @@ export type TaskWordFlowProps = {
   handleTokenWordLayout: (tokenKey: string, event: LayoutChangeEvent) => void;
   handleToggleWordVocabulary: (rawWord: string, normalizedWord: string | null) => void;
   isPlaying: boolean;
+  isPlaybackNavigationActive: boolean;
   mainTextFontFamily: string | undefined;
   mainTextFontSize: number;
   mainTextLineHeight: number;

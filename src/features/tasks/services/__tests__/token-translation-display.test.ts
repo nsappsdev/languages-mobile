@@ -69,11 +69,11 @@ describe('getVocabularyTapAction', () => {
     expect(getVocabularyTapAction(false, true, true)).toBe('toggle');
   });
 
-  it('allows an already selected untranslated entry to be removed', () => {
-    expect(getVocabularyTapAction(true, true, false)).toBe('toggle');
+  it('shows missing-translation feedback for an already selected untranslated entry', () => {
+    expect(getVocabularyTapAction(true, true, false)).toBe('show-missing-translation');
   });
 
-  it('ignores text with no vocabulary entry', () => {
-    expect(getVocabularyTapAction(false, false, false)).toBe('ignore');
+  it('shows missing-translation feedback for text with no vocabulary entry', () => {
+    expect(getVocabularyTapAction(false, false, false)).toBe('show-missing-translation');
   });
 });

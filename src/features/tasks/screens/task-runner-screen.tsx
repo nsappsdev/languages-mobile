@@ -491,7 +491,9 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       }
       const startSeconds = startMs / 1000;
       scrollToSegment(getSegmentIdAtMs(startMs), false);
-      void player.seekTo(startSeconds);
+      void player.seekTo(startSeconds).then(() => {
+        player.play();
+      });
     },
     [activeModeId, getSegmentIdAtMs, isPlaying, player, scrollToSegment, seekActiveModeToMs],
   );
@@ -662,6 +664,7 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
               handleTokenWordLayout={handleTokenWordLayout}
               handleToggleWordVocabulary={handleToggleWordVocabulary}
               isPlaying={isPlaying}
+              isPlaybackNavigationActive={isPlaying}
               mainTextFontFamily={mainTextFontFamily}
               mainTextFontSize={mainTextFontSize}
               mainTextLineHeight={mainTextLineHeight}

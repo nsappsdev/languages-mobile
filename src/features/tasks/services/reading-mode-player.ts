@@ -83,7 +83,9 @@ export async function playUntilPosition({
       status.currentTime * 1000 >= endMs - RANGE_END_TOLERANCE_MS,
     timeoutMs: Math.max(POSITION_TIMEOUT_MS, endMs - player.currentStatus.currentTime * 1000 + 5000),
   });
-  player.pause();
+  if (!isCancelled()) {
+    player.pause();
+  }
   return reached;
 }
 
