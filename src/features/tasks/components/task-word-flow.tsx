@@ -201,7 +201,7 @@ export const TaskWordFlow = memo(function TaskWordFlow({
         const pulseValue = getTokenPulseValue(pulseNormalizedWord);
         const pulseScale = pulseValue.interpolate({
           inputRange: [0, 1],
-          outputRange: [1, 1.2],
+          outputRange: [1, showMissingIndicator ? 1.2 : 1.34],
         });
         const missingIndicatorAnimation = showMissingIndicator
           ? getMissingTranslationAnimation(normalizedWord)

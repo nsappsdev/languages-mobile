@@ -152,11 +152,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       const pulseValue =
         tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
       tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
-      const riseDuration = 480;
-      const fallDuration = 680;
+      const riseDuration = 320;
+      const fallDuration = 420;
       const holdDuration = Math.max(
-        280,
-        Math.min(durationMs - riseDuration - fallDuration, 900),
+        160,
+        Math.min(durationMs - riseDuration - fallDuration, 650),
       );
 
       pulseValue.stopAnimation(() => {
