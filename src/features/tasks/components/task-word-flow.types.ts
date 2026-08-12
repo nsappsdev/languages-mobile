@@ -12,6 +12,7 @@ export type TranslationFitSettings = {
 
 export type TaskWordFlowProps = {
   activeSegmentId: string | null;
+  centered?: boolean;
   entryCacheByText: Record<string, VocabularyEntry>;
   getTokenPulseValue: (normalizedWord: string) => Animated.Value;
   handleSeekToSegment: (startMs: number | null) => void;
@@ -25,6 +26,7 @@ export type TaskWordFlowProps = {
   mainTextLineHeight: number;
   onLayout: (event: LayoutChangeEvent) => void;
   pendingWords: Record<string, true>;
+  reserveTranslationWidth?: boolean;
   segmentStartById: Record<string, number>;
   tokenSegmentIds: (string | null)[];
   tokenWidths: Record<string, number>;

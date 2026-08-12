@@ -1,12 +1,28 @@
-import type { ReactNode } from 'react';
-import { View } from 'react-native';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styles';
+import { FeedbackState } from '@/src/shared/ui/feedback-state';
 
-export function VocabularyStateScreen({ children }: { children: ReactNode }) {
+export function VocabularyStateScreen({
+  actionLabel,
+  loading = false,
+  message,
+  onAction,
+  title,
+}: {
+  actionLabel?: string;
+  loading?: boolean;
+  message?: string;
+  onAction?: () => void;
+  title: string;
+}) {
   return (
     <ScreenContainer>
-      <View style={styles.center}>{children}</View>
+      <FeedbackState
+        actionLabel={actionLabel}
+        loading={loading}
+        message={message}
+        onAction={onAction}
+        title={title}
+      />
     </ScreenContainer>
   );
 }

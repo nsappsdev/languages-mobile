@@ -1,20 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AuthShell } from '@/src/features/auth/components/auth-shell';
+import { validateEmail, validatePassword } from '@/src/features/auth/utils/validators';
 import { ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
+import { spacing, status, text, typography } from '@/src/shared/theme';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
-import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { validateEmail, validatePassword } from '@/src/features/auth/utils/validators';
-import { border, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import { TextField } from '@/src/shared/ui/text-field';
 
 export function LoginScreen() {
   const router = useRouter();
@@ -58,113 +51,95 @@ export function LoginScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Language App</Text>
-          <Text style={styles.subtitle}>Sign in to access lessons and audio playback.</Text>
-        </View>
+    <AuthShell
+      eyebrow="Your learning space"
+      title="Welcome back"
+      subtitle="Continue your English lessons with clear audio and Armenian support.">
+      <View style={styles.form}>
+        <TextField
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          label="Email"
+          onChangeText={setEmail}
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          placeholder="you@example.com"
+          returnKeyType="next"
+          value={email}
+        />
 
-        <View style={styles.form}>
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              placeholder="you@example.com"
-              placeholderTextColor={neutral[400]}
-              returnKeyType="next"
-              style={styles.input}
-              value={email}
-            />
+        <TextField
+          ref={passwordRef}
+          autoCapitalize="none"
+          label="Password"
+          onChangeText={setPassword}
+          onSubmitEditing={() => {
+            void handleLogin();
+          }}
+          placeholder="Enter your password"
+          returnKeyType="done"
+          secureTextEntry
+          value={password}
+        />
+
+        {error ? (
+          <View accessibilityLiveRegion="polite" style={styles.errorNotice}>
+            <Text style={styles.error}>{error}</Text>
           </View>
+        ) : null}
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              ref={passwordRef}
-              autoCapitalize="none"
-              onChangeText={setPassword}
-              onSubmitEditing={handleLogin}
-              placeholder="••••••••"
-              placeholderTextColor={neutral[400]}
-              returnKeyType="done"
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
-          </View>
+        <PrimaryButton
+          title={isSubmitting ? 'Signing in…' : 'Sign in'}
+          onPress={() => {
+            void handleLogin();
+          }}
+          loading={isSubmitting}
+          disabled={!email.trim() || !password}
+        />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <PrimaryButton
-            title={isSubmitting ? 'Signing In...' : 'Sign In'}
-            onPress={handleLogin}
-            loading={isSubmitting}
-            disabled={!email.trim() || !password}
-          />
-
-          <Pressable onPress={() => router.push('/(auth)/signup')}>
-            <Text style={styles.hint}>No account yet? Create one.</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </ScreenContainer>
+        <Pressable
+          accessibilityHint="Opens the account creation form"
+          accessibilityRole="link"
+          onPress={() => router.push('/(auth)/signup')}
+          style={({ pressed }) => [styles.authLink, pressed && styles.authLinkPressed]}>
+          <Text style={styles.hint}>
+            No account yet? <Text style={styles.hintAction}>Create one</Text>
+          </Text>
+        </Pressable>
+      </View>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    marginBottom: 32,
-  },
-  title: {
-    color: text.primary,
-    fontSize: fontSize['5xl'],
-    fontWeight: fontWeight.bold,
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: text.secondary,
-    fontSize: fontSize.lg,
-    lineHeight: 22,
-  },
   form: {
-    gap: 16,
+    gap: spacing[4],
   },
-  field: {
-    gap: 8,
-  },
-  label: {
-    color: text.primary,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold,
-  },
-  input: {
-    backgroundColor: surface.input,
-    borderColor: border.default,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    color: text.primary,
-    fontSize: fontSize.lg,
-    minHeight: 48,
-    paddingHorizontal: 12,
+  errorNotice: {
+    backgroundColor: status.errorBg,
+    borderRadius: 12,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
   },
   error: {
     color: text.error,
-    fontSize: fontSize.md,
+    ...typography.label,
+  },
+  authLink: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing[2],
+  },
+  authLinkPressed: {
+    opacity: 0.86,
   },
   hint: {
     color: text.secondary,
-    fontSize: fontSize.sm,
     textAlign: 'center',
+    ...typography.label,
+  },
+  hintAction: {
+    color: text.brand,
   },
 });

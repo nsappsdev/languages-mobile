@@ -1,6 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
 import { LessonDashboardList } from '@/src/features/lessons/components/lesson-dashboard-list';
 import {
@@ -23,7 +23,11 @@ import type { Lesson } from '@/src/types/domain';
 
 export { getLessonCardStatus, resolveCurrentLessonId };
 
-export function LessonListScreen() {
+export function LessonListScreen({
+  experience = 'continuous',
+}: {
+  experience?: 'continuous' | 'paged';
+}) {
   const router = useRouter();
   const { token, user, refreshProfile } = useSession();
   const {
@@ -51,66 +55,60 @@ export function LessonListScreen() {
         await loadProgressState();
       }
 
-      router.push({ pathname: '/runner/[lessonId]', params: { lessonId: item.id } });
+      router.push({
+        pathname: experience === 'paged' ? '/runner-2/[lessonId]' : '/runner/[lessonId]',
+        params: { lessonId: item.id },
+      });
     },
-    [loadProgressState, router, user?.id],
+    [experience, loadProgressState, router, user?.id],
   );
 
   if (!token) {
     return (
-      <LessonDashboardState>
-        <Text style={styles.meta}>Please sign in first.</Text>
-      </LessonDashboardState>
+      <LessonDashboardState
+        message="Sign in to see your learning path and continue your lessons."
+        title="Sign in to view lessons"
+      />
     );
   }
 
   if (user && user.emailVerified !== true) {
     return (
-      <ScreenContainer>
-        <View style={styles.header}>
-          <Text style={styles.title}>Dashboard</Text>
-          <Text style={styles.meta}>Verify your email to unlock lessons.</Text>
+      <ScreenContainer scroll>
+        <View style={styles.verificationContent}>
+          <LessonDashboardHeader subtitle="Verify your email to unlock lessons and start learning." />
+          <VerificationBanner
+            title="Lessons are locked"
+            body={`We sent a verification link to ${user.email}. Open it to start learning.`}
+          />
         </View>
-        <VerificationBanner
-          title="Lessons are locked"
-          body={`We sent a verification link to ${user.email}. Open it to start learning.`}
-        />
       </ScreenContainer>
     );
   }
 
   if (isLoading) {
     return (
-      <LessonDashboardState>
-        <ActivityIndicator size="large" />
-        <Text style={styles.meta}>Loading lessons...</Text>
-      </LessonDashboardState>
+      <LessonDashboardState
+        loading
+        message="Preparing your lesson library and latest progress."
+        title="Loading lessons"
+      />
     );
   }
 
   if (error) {
     return (
-      <LessonDashboardState>
-        <Text style={styles.error}>{error}</Text>
-        <Pressable onPress={() => fetchLessons().catch(() => null)} style={styles.retryButton}>
-          <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
-      </LessonDashboardState>
+      <LessonDashboardState
+        actionLabel="Try again"
+        message={error}
+        onAction={() => fetchLessons().catch(() => null)}
+        title="Lessons couldn't load"
+      />
     );
   }
 
   return (
     <ScreenContainer>
-      <LessonDashboardHeader />
-      <LessonSummaryCards
-        completedLessons={summary.completedLessons}
-        totalLessons={summary.totalLessons}
-      />
-      <LearningProgressCard
-        currentLesson={summary.currentLesson}
-        progressPercent={summary.progressPercent}
-        totalLessons={summary.totalLessons}
-      />
       <LessonDashboardList
         completedSet={summary.completedSet}
         currentLessonId={summary.currentLessonId}
@@ -121,8 +119,27 @@ export function LessonListScreen() {
         }}
         onRefresh={() => {
           fetchLessons(true).catch(() => null);
-        }}
-      />
+        }}>
+        <LessonDashboardHeader
+          eyebrow={experience === 'paged' ? 'BOOK READER' : undefined}
+          subtitle={
+            experience === 'paged'
+              ? 'Open the same lessons one sentence at a time, like turning pages in a book.'
+              : undefined
+          }
+          title={experience === 'paged' ? 'Lessons 2' : undefined}
+        />
+        <LessonSummaryCards
+          completedLessons={summary.completedLessons}
+          totalLessons={summary.totalLessons}
+        />
+        <LearningProgressCard
+          completedLessons={summary.completedLessons}
+          currentLesson={summary.currentLesson}
+          progressPercent={summary.progressPercent}
+          totalLessons={summary.totalLessons}
+        />
+      </LessonDashboardList>
     </ScreenContainer>
   );
 }

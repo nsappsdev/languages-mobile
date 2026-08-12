@@ -1,12 +1,26 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
+import {
+  border,
+  controlSize,
+  motion,
+  palette,
+  radii,
+  spacing,
+  status,
+  surface,
+  text,
+  typography,
+} from '@/src/shared/theme';
+import { Card } from '@/src/shared/ui/card';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { VerificationBanner } from '@/src/features/auth/components/verification-banner';
-import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import { TextField } from '@/src/shared/ui/text-field';
 
 export function ProfileScreen() {
   const router = useRouter();
@@ -110,27 +124,43 @@ export function ProfileScreen() {
   };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer scroll maxWidth={680}>
       <View style={styles.container}>
-        <Text style={styles.title}>Profile</Text>
+        <View style={styles.header}>
+          <Text style={styles.eyebrow}>Your account</Text>
+          <Text accessibilityRole="header" style={styles.title}>
+            Profile
+          </Text>
+          <Text style={styles.subtitle}>Keep your details current and your learning access secure.</Text>
+        </View>
 
         {isRefreshing ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator size="small" />
-            <Text style={styles.meta}>Refreshing profile...</Text>
+          <View accessibilityLiveRegion="polite" style={styles.loadingRow}>
+            <ActivityIndicator color={palette.primary} size="small" />
+            <Text style={styles.meta}>Refreshing profile…</Text>
           </View>
         ) : null}
 
-        <View style={styles.card}>
+        <Card style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.identityIcon}>
+              <Ionicons color={palette.primary} name="person-outline" size={24} />
+            </View>
+            <View style={styles.cardHeaderText}>
+              <Text style={styles.cardTitle}>Personal details</Text>
+              <Text style={styles.cardSubtitle}>Used to identify your learning account.</Text>
+            </View>
+          </View>
+
           <View style={styles.nameRow}>
-            <Text style={styles.label}>Name</Text>
             {isEditingName ? (
               <View style={styles.editGroup}>
-                <TextInput
+                <TextField
                   value={nameDraft}
                   onChangeText={setNameDraft}
+                  label="Name"
+                  error={nameError}
                   placeholder="Your name"
-                  placeholderTextColor={neutral[400]}
                   autoFocus
                   editable={!isSavingName}
                   maxLength={80}
@@ -138,12 +168,12 @@ export function ProfileScreen() {
                   onSubmitEditing={() => {
                     void handleSaveName();
                   }}
-                  style={styles.input}
                 />
-                {nameError ? <Text style={styles.fieldError}>{nameError}</Text> : null}
                 <View style={styles.editActions}>
                   <Pressable
+                    accessibilityLabel="Cancel name edit"
                     accessibilityRole="button"
+                    accessibilityState={{ disabled: isSavingName }}
                     onPress={handleCancelEditName}
                     disabled={isSavingName}
                     style={({ pressed }) => [
@@ -153,7 +183,9 @@ export function ProfileScreen() {
                     <Text style={styles.cancelButtonText}>Cancel</Text>
                   </Pressable>
                   <Pressable
+                    accessibilityLabel="Save name"
                     accessibilityRole="button"
+                    accessibilityState={{ busy: isSavingName, disabled: isSavingName }}
                     onPress={() => {
                       void handleSaveName();
                     }}
@@ -164,7 +196,7 @@ export function ProfileScreen() {
                       pressed && !isSavingName && styles.buttonPressed,
                     ]}>
                     {isSavingName ? (
-                      <ActivityIndicator color={neutral[0]} size="small" />
+                      <ActivityIndicator color={text.inverse} size="small" />
                     ) : (
                       <Text style={styles.saveButtonText}>Save</Text>
                     )}
@@ -172,9 +204,13 @@ export function ProfileScreen() {
                 </View>
               </View>
             ) : (
-              <View style={styles.nameDisplay}>
-                <Text style={styles.value}>{user?.name ?? 'Unknown'}</Text>
+              <View style={styles.detailRow}>
+                <View style={styles.detailText}>
+                  <Text style={styles.label}>Name</Text>
+                  <Text style={styles.value}>{user?.name ?? 'Unknown'}</Text>
+                </View>
                 <Pressable
+                  accessibilityLabel="Edit name"
                   accessibilityRole="button"
                   onPress={handleStartEditName}
                   style={({ pressed }) => [styles.editLink, pressed && styles.buttonPressed]}>
@@ -184,33 +220,59 @@ export function ProfileScreen() {
             )}
           </View>
           <Row label="Email" value={user?.email ?? 'Unknown'} />
-          <Row
-            label="Email verified"
-            value={user?.emailVerified ? 'Yes' : 'No'}
-            isLast
-          />
-        </View>
+          <View style={styles.rowLast}>
+            <View style={styles.detailText}>
+              <Text style={styles.label}>Email status</Text>
+              <View
+                accessibilityLabel={user?.emailVerified ? 'Email verified' : 'Email not verified'}
+                style={[styles.statusPill, user?.emailVerified ? styles.verifiedPill : styles.pendingPill]}>
+                <Ionicons
+                  color={user?.emailVerified ? palette.success : palette.warning}
+                  name={user?.emailVerified ? 'checkmark-circle-outline' : 'time-outline'}
+                  size={16}
+                />
+                <Text style={user?.emailVerified ? styles.verifiedText : styles.pendingText}>
+                  {user?.emailVerified ? 'Verified' : 'Pending verification'}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Card>
 
         {user && user.emailVerified !== true ? <VerificationBanner variant="block" /> : null}
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <View accessibilityLiveRegion="polite" style={styles.errorNotice}>
+            <Text style={styles.error}>{error}</Text>
+          </View>
+        ) : null}
 
-        <PrimaryButton
-          title={isLoggingOut ? 'Signing Out...' : 'Sign Out'}
-          onPress={handleLogout}
-          loading={isLoggingOut}
-          disabled={isLoggingOut}
-        />
+        <View style={styles.signOutSection}>
+          <Text style={styles.signOutHint}>Sign out on this device. Your lesson progress remains saved.</Text>
+          <PrimaryButton
+            title={isLoggingOut ? 'Signing out…' : 'Sign out'}
+            onPress={() => {
+              void handleLogout();
+            }}
+            loading={isLoggingOut}
+            disabled={isLoggingOut}
+            variant="danger"
+          />
+        </View>
       </View>
     </ScreenContainer>
   );
 }
 
-function Row({ label, value, isLast }: { label: string; value: string; isLast?: boolean }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
-    <View style={[styles.row, isLast && styles.rowLast]}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+    <View style={styles.row}>
+      <View style={styles.detailText}>
+        <Text style={styles.label}>{label}</Text>
+        <Text selectable style={styles.value}>
+          {value}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -218,124 +280,191 @@ function Row({ label, value, isLast }: { label: string; value: string; isLast?: 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: 14,
+    gap: spacing[4],
+    paddingBottom: spacing[6],
+  },
+  header: {
+    gap: spacing[1],
+    marginBottom: spacing[2],
+  },
+  eyebrow: {
+    color: text.brand,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    ...typography.caption,
   },
   title: {
     color: text.primary,
-    fontSize: fontSize['3xl'],
-    fontWeight: fontWeight.bold,
+    ...typography.screenTitle,
+  },
+  subtitle: {
+    color: text.secondary,
+    maxWidth: 520,
+    ...typography.body,
   },
   loadingRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing[2],
   },
   meta: {
     color: text.secondary,
-    fontSize: fontSize.base,
+    ...typography.label,
   },
   card: {
-    backgroundColor: surface.card,
-    borderColor: border.subtle,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    padding: 14,
+    padding: spacing[5],
+  },
+  cardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: spacing[3],
+    paddingBottom: spacing[4],
+  },
+  identityIcon: {
+    alignItems: 'center',
+    backgroundColor: palette.primarySoft,
+    borderRadius: radii.full,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  cardHeaderText: {
+    flex: 1,
+    gap: spacing[1],
+  },
+  cardTitle: {
+    color: text.primary,
+    ...typography.cardTitle,
+  },
+  cardSubtitle: {
+    color: text.secondary,
+    ...typography.caption,
   },
   nameRow: {
     borderBottomColor: border.default,
     borderBottomWidth: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
   },
-  nameDisplay: {
+  detailRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: spacing[3],
     justifyContent: 'space-between',
-    marginTop: 4,
+  },
+  detailText: {
+    flex: 1,
+    gap: spacing[1],
   },
   editGroup: {
-    gap: 8,
-    marginTop: 6,
-  },
-  input: {
-    backgroundColor: surface.input,
-    borderColor: border.default,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    color: text.primary,
-    fontSize: fontSize.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: spacing[3],
   },
   editActions: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: spacing[2],
     justifyContent: 'flex-end',
   },
   cancelButton: {
-    borderColor: border.default,
-    borderRadius: radii.md,
+    alignItems: 'center',
+    borderColor: border.strong,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    minHeight: controlSize.minimumTarget,
+    paddingHorizontal: spacing[4],
   },
   cancelButtonText: {
     color: text.primary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+    ...typography.label,
   },
   saveButton: {
-    backgroundColor: brand[700],
-    borderRadius: radii.md,
-    minWidth: 72,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: palette.primary,
+    borderRadius: radii.lg,
+    justifyContent: 'center',
+    minHeight: controlSize.minimumTarget,
+    minWidth: 88,
+    paddingHorizontal: spacing[4],
   },
   saveButtonDisabled: {
-    backgroundColor: neutral[400],
+    opacity: motion.disabledOpacity,
   },
   saveButtonText: {
-    color: neutral[0],
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+    color: text.inverse,
     textAlign: 'center',
+    ...typography.label,
   },
   buttonPressed: {
-    opacity: 0.85,
+    opacity: motion.pressedOpacity,
   },
   editLink: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: controlSize.minimumTarget,
+    paddingHorizontal: spacing[3],
   },
   editLinkText: {
     color: text.brand,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
-  },
-  fieldError: {
-    color: text.error,
-    fontSize: fontSize.sm,
+    ...typography.label,
   },
   row: {
     borderBottomColor: border.default,
     borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
   },
   rowLast: {
-    borderBottomWidth: 0,
+    paddingTop: spacing[3],
   },
   label: {
     color: text.secondary,
-    fontSize: fontSize.base,
+    ...typography.caption,
   },
   value: {
     color: text.primary,
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+    ...typography.body,
+  },
+  statusPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: radii.full,
+    flexDirection: 'row',
+    gap: spacing[1],
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
+  },
+  verifiedPill: {
+    backgroundColor: palette.successSurface,
+  },
+  pendingPill: {
+    backgroundColor: palette.warningSurface,
+  },
+  verifiedText: {
+    color: palette.success,
+    ...typography.caption,
+  },
+  pendingText: {
+    color: palette.warning,
+    ...typography.caption,
+  },
+  errorNotice: {
+    backgroundColor: status.errorBg,
+    borderRadius: radii.lg,
+    padding: spacing[3],
   },
   error: {
     color: text.error,
-    fontSize: fontSize.sm,
+    ...typography.label,
+  },
+  signOutSection: {
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderRadius: radii['2xl'],
+    borderWidth: 1,
+    gap: spacing[3],
+    padding: spacing[4],
+  },
+  signOutHint: {
+    color: text.secondary,
+    ...typography.body,
   },
 });

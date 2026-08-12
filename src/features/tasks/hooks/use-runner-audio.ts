@@ -8,6 +8,7 @@ import {
   prefetchAudio,
 } from '@/src/features/tasks/services/audio-cache';
 import { getActiveWordTimingId } from '@/src/features/tasks/screens/task-runner-word-timings';
+import { getPagedPlaybackSegmentId } from '@/src/features/tasks/services/task-runner-pages';
 import type { LessonItem } from '@/src/types/domain';
 
 type PlaybackUiStatus = {
@@ -17,6 +18,7 @@ type PlaybackUiStatus = {
   didJustFinish: boolean;
   duration: number;
   playing: boolean;
+  pageTargetSegmentId: string | null;
   scrollTargetSegmentId: string | null;
 };
 
@@ -27,6 +29,7 @@ const EMPTY_STATUS: PlaybackUiStatus = {
   didJustFinish: false,
   duration: 0,
   playing: false,
+  pageTargetSegmentId: null,
   scrollTargetSegmentId: null,
 };
 
@@ -34,10 +37,12 @@ export function useRunnerAudio({
   currentAudioUrl,
   currentItem,
   nextAudioUrl,
+  progressUpdateIntervalMs = 1000,
 }: {
   currentAudioUrl: string | null;
   currentItem: LessonItem | undefined;
   nextAudioUrl: string | null;
+  progressUpdateIntervalMs?: number;
 }) {
   const [playableAudioUrl, setPlayableAudioUrl] = useState<string | null>(null);
   const [isAudioCaching, setIsAudioCaching] = useState(false);
@@ -62,11 +67,15 @@ export function useRunnerAudio({
       const activeWordTimingId = currentItem
         ? getActiveWordTimingId(currentItem.wordTimings ?? [], positionMs)
         : null;
+      const pageTargetSegmentId = currentItem
+        ? getPagedPlaybackSegmentId({ positionMs, segments: currentItem.segments })
+        : null;
       const uiKey = [
         activeSegment?.id ?? '',
         activeWordTimingId ?? '',
         anticipatedSegment?.id ?? '',
-        Math.floor(status.currentTime),
+        pageTargetSegmentId ?? '',
+        Math.floor((status.currentTime * 1000) / progressUpdateIntervalMs),
         Math.round(status.duration),
         status.playing ? '1' : '0',
         status.didJustFinish ? '1' : '0',
@@ -80,11 +89,12 @@ export function useRunnerAudio({
         didJustFinish: status.didJustFinish,
         duration: status.duration,
         playing: status.playing,
+        pageTargetSegmentId,
         scrollTargetSegmentId: anticipatedSegment?.id ?? null,
       });
     });
     return () => subscription.remove();
-  }, [currentItem, player]);
+  }, [currentItem, player, progressUpdateIntervalMs]);
 
   useEffect(() => {
     if (!currentAudioUrl) {

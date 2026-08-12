@@ -1,13 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text, View } from 'react-native';
 import { brand, neutral } from '@/src/shared/theme';
+import { ProgressBar } from '@/src/shared/ui/progress-bar';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import { styles } from '@/src/features/tasks/screens/task-runner-screen.styles';
 import type { ReadingModeSettings } from '@/src/types/domain';
 
 export function BackToDashboardLink({ onPress }: { onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={styles.dashboardLink}>
+    <Pressable
+      accessibilityLabel="Back to dashboard"
+      accessibilityRole="button"
+      hitSlop={8}
+      onPress={onPress}
+      style={({ pressed }) => [styles.dashboardLink, pressed && styles.audioIconButtonPressed]}>
       <Ionicons name="chevron-back" size={18} color={brand[700]} />
       <Text style={styles.dashboardLinkText}>Back to Dashboard</Text>
     </Pressable>
@@ -35,18 +41,21 @@ export function ReadingModeDock({
   modes,
   onToggleMode,
   playing,
+  variant = 'dock',
 }: {
   activeModeId: string | null;
   getDisabledReason: (modeId: ReadingModeSettings['id']) => string | null;
   modes: ReadingModeSettings[];
   onToggleMode: (mode: ReadingModeSettings) => void;
   playing: boolean;
+  variant?: 'book' | 'dock';
 }) {
   return (
-    <View style={styles.audioDock}>
+    <View style={[styles.audioDock, variant === 'book' && styles.audioDockBook]}>
       {modes.map((mode) => {
         const disabledReason = getDisabledReason(mode.id);
         const isActive = activeModeId === mode.id && playing;
+        const isSelected = activeModeId === mode.id;
         return (
           <Pressable
             key={mode.id}
@@ -54,20 +63,32 @@ export function ReadingModeDock({
             disabled={Boolean(disabledReason)}
             accessibilityRole="button"
             accessibilityLabel={`${isActive ? 'Pause' : 'Play'} ${mode.displayName}`}
+            accessibilityHint={disabledReason ?? undefined}
+            accessibilityState={{ disabled: Boolean(disabledReason), selected: isSelected }}
             style={({ pressed }) => [
               styles.modeButton,
-              isActive && styles.modeButtonActive,
+              variant === 'book' && styles.modeButtonBook,
+              isActive && variant === 'dock' && styles.modeButtonActive,
               disabledReason && styles.audioIconButtonDisabled,
               pressed && !disabledReason && styles.audioIconButtonPressed,
             ]}>
-            <Ionicons
-              name={isActive ? 'pause' : 'play'}
-              size={16}
-              color={isActive ? neutral[0] : brand[700]}
-            />
-            <Text style={[styles.modeButtonText, isActive && styles.modeButtonTextActive]}>
+            {variant === 'dock' ? (
+              <Ionicons
+                name={isActive ? 'pause' : 'play'}
+                size={16}
+                color={isActive ? neutral[0] : brand[700]}
+              />
+            ) : null}
+            <Text
+              style={[
+                styles.modeButtonText,
+                variant === 'book' && styles.modeButtonTextBook,
+                isActive && variant === 'dock' && styles.modeButtonTextActive,
+                isSelected && variant === 'book' && styles.modeButtonTextBookSelected,
+              ]}>
               {mode.displayName}
             </Text>
+            {variant === 'book' && isSelected ? <View style={styles.modeSelectionDot} /> : null}
           </Pressable>
         );
       })}
@@ -87,6 +108,7 @@ export function LessonRunnerHeader({
   return (
     <View style={styles.header}>
       <BackToDashboardLink onPress={onBack} />
+      <Text style={styles.eyebrow}>Focused lesson</Text>
       <View style={styles.headerTitleRow}>
         <Text style={styles.title}>{lessonTitle}</Text>
         <Text style={styles.progress}>{progressText}</Text>
@@ -100,9 +122,7 @@ export function LessonProgressOverview({ completion }: { completion: number }) {
     <View style={styles.overviewCard}>
       <Text style={styles.overviewLabel}>Lesson Progress</Text>
       <Text style={styles.overviewValue}>{completion}% complete</Text>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${completion}%` }]} />
-      </View>
+      <ProgressBar progress={completion / 100} />
     </View>
   );
 }

@@ -9,8 +9,8 @@ import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } fr
 const FOOTER_ITEMS: {
   key: string;
   label: string;
-  icon: 'home-outline' | 'book-outline' | 'person-outline';
-  activeIcon: 'home' | 'book' | 'person';
+  icon: 'home-outline' | 'reader-outline' | 'book-outline' | 'person-outline';
+  activeIcon: 'home' | 'reader' | 'book' | 'person';
   href: Href;
   matches: string[];
 }[] = [
@@ -20,7 +20,15 @@ const FOOTER_ITEMS: {
     icon: 'home-outline',
     activeIcon: 'home',
     href: '/(tabs)/lessons',
-    matches: ['/runner/', '/results/'],
+    matches: [],
+  },
+  {
+    key: 'lessons-2',
+    label: 'Lessons 2',
+    icon: 'reader-outline',
+    activeIcon: 'reader',
+    href: '/(tabs)/lessons-2',
+    matches: [],
   },
   {
     key: 'vocabulary',
@@ -64,6 +72,9 @@ export function GlobalFooter() {
           return (
             <Pressable
               key={item.key}
+              accessibilityLabel={item.label}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
               onPress={() => router.replace(item.href)}
               style={({ pressed }) => [
                 styles.item,
@@ -101,7 +112,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 8,
     paddingTop: 8,
-    boxShadow: '0px 10px 18px rgba(0, 0, 0, 0.08)',
+    boxShadow: '0px 4px 12px rgba(23, 33, 31, 0.05)',
   },
   item: {
     alignItems: 'center',
@@ -115,7 +126,7 @@ const styles = StyleSheet.create({
     backgroundColor: surface.active,
   },
   itemPressed: {
-    opacity: 0.85,
+    opacity: 0.86,
   },
   label: {
     color: text.muted,

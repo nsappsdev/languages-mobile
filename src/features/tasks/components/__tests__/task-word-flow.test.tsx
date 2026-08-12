@@ -96,7 +96,7 @@ describe('TaskWordFlow', () => {
   }
 
   it('flashes the missing-translation indicator when a selected untranslated word is tapped while paused', () => {
-    let renderer: ReactTestRenderer;
+    let renderer!: ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
         <TaskWordFlow
@@ -131,7 +131,7 @@ describe('TaskWordFlow', () => {
   });
 
   it('flashes the missing-translation indicator for a plain lesson word with no vocabulary entry', () => {
-    let renderer: ReactTestRenderer;
+    let renderer!: ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
         <TaskWordFlow
@@ -161,7 +161,7 @@ describe('TaskWordFlow', () => {
   });
 
   it('seeks instead of showing vocabulary feedback when playback navigation is active', () => {
-    let renderer: ReactTestRenderer;
+    let renderer!: ReactTestRenderer;
     act(() => {
       renderer = TestRenderer.create(
         <TaskWordFlow
