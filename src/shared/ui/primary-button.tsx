@@ -6,7 +6,8 @@ interface PrimaryButtonProps {
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | 'danger' | 'quiet';
+  accessibilityLabel?: string;
 }
 
 export function PrimaryButton({
@@ -15,21 +16,28 @@ export function PrimaryButton({
   disabled = false,
   loading = false,
   variant = 'primary',
+  accessibilityLabel,
 }: PrimaryButtonProps) {
+  const isSecondary = variant === 'secondary' || variant === 'quiet';
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityRole="button"
+      accessibilityState={{ busy: loading, disabled: disabled || loading }}
       onPress={onPress}
       disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
-        variant === 'secondary' && styles.buttonSecondary,
+        isSecondary && styles.buttonSecondary,
+        variant === 'quiet' && styles.buttonQuiet,
+        variant === 'danger' && styles.buttonDanger,
         (disabled || loading) && styles.buttonDisabled,
         pressed && !disabled && !loading && styles.buttonPressed,
       ]}>
       {loading ? (
-        <ActivityIndicator color={variant === 'secondary' ? brand[700] : neutral[0]} />
+        <ActivityIndicator color={isSecondary ? brand[700] : neutral[0]} />
       ) : (
-        <Text style={[styles.text, variant === 'secondary' && styles.textSecondary]}>{title}</Text>
+        <Text style={[styles.text, isSecondary && styles.textSecondary]}>{title}</Text>
       )}
     </Pressable>
   );
@@ -49,11 +57,18 @@ const styles = StyleSheet.create({
     borderColor: border.active,
     borderWidth: 1,
   },
+  buttonQuiet: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
+  buttonDanger: {
+    backgroundColor: text.error,
+  },
   buttonDisabled: {
     backgroundColor: neutral[400],
   },
   buttonPressed: {
-    opacity: 0.9,
+    opacity: 0.86,
   },
   text: {
     color: text.inverse,

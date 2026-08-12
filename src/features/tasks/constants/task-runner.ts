@@ -1,8 +1,9 @@
 import type { ReadingModeSettings } from '@/src/types/domain';
+import { runnerTypography } from '@/src/features/tasks/theme/runner-typography';
 
-export const TOKEN_WORD_FONT_SIZE = 18;
-export const TOKEN_WORD_LINE_HEIGHT = 24;
-export const TOKEN_WORD_HORIZONTAL_PADDING = 3;
+export const TOKEN_WORD_FONT_SIZE = runnerTypography.englishDefaultSize;
+export const TOKEN_WORD_LINE_HEIGHT = runnerTypography.englishDefaultLineHeight;
+export const TOKEN_WORD_HORIZONTAL_PADDING = runnerTypography.wordHorizontalPadding;
 export const MAX_VOCABULARY_TOKEN_MATCH_WORDS = 7;
 export const CONTIGUOUS_RANGE_TOLERANCE_MS = 20;
 export const ACTIVE_SEGMENT_SCROLL_LOOKAHEAD_MS = 650;

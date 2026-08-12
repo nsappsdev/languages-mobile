@@ -4,8 +4,6 @@ import 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { SessionProvider } from '@/src/shared/auth/session-context';
 import { ErrorBoundary } from '@/src/shared/ui/error-boundary';
-import { FooterInsetProvider } from '@/src/shared/ui/footer-inset-context';
-import { GlobalFooter } from '@/src/shared/ui/global-footer';
 import { AppUpdateNotice } from '@/src/shared/ui/app-update-notice';
 
 export default function RootLayout() {
@@ -13,18 +11,16 @@ export default function RootLayout() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <SessionProvider>
-          <FooterInsetProvider>
-            <Stack>
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="runner/[lessonId]" options={{ title: 'Task Runner' }} />
-              <Stack.Screen name="results/[lessonId]" options={{ title: 'Lesson Results' }} />
-            </Stack>
-            <AppUpdateNotice />
-            <GlobalFooter />
-            <StatusBar style="auto" />
-          </FooterInsetProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="runner/[lessonId]" />
+            <Stack.Screen name="runner-2/[lessonId]" />
+            <Stack.Screen name="results/[lessonId]" />
+          </Stack>
+          <AppUpdateNotice />
+          <StatusBar style="dark" />
         </SessionProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

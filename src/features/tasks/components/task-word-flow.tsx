@@ -14,12 +14,14 @@ import {
 } from '@/src/features/tasks/services/token-translation-display';
 import { wordFlowStyles } from '@/src/features/tasks/components/task-word-flow.styles';
 import type { TaskWordFlowProps } from '@/src/features/tasks/components/task-word-flow.types';
+import { runnerMotion } from '@/src/features/tasks/theme/runner-motion';
 
-const NO_TRANSLATION_FEEDBACK_MS = 1600;
-const NO_TRANSLATION_ICON_SCALE = 1.85;
+const NO_TRANSLATION_FEEDBACK_MS = runnerMotion.missingTranslation.visible;
+const NO_TRANSLATION_ICON_SCALE = runnerMotion.missingTranslation.scale;
 
 export const TaskWordFlow = memo(function TaskWordFlow({
   activeSegmentId,
+  centered = false,
   entryCacheByText,
   getTokenPulseValue,
   handleSeekToSegment,
@@ -33,6 +35,7 @@ export const TaskWordFlow = memo(function TaskWordFlow({
   mainTextLineHeight,
   onLayout,
   pendingWords,
+  reserveTranslationWidth = false,
   segmentStartById,
   tokenSegmentIds,
   tokenWidths,
@@ -70,17 +73,17 @@ export const TaskWordFlow = memo(function TaskWordFlow({
     animation.setValue(0);
     Animated.sequence([
       Animated.timing(animation, {
-        duration: 140,
+        duration: runnerMotion.missingTranslation.firstBeat,
         toValue: 1,
         useNativeDriver: true,
       }),
       Animated.timing(animation, {
-        duration: 140,
+        duration: runnerMotion.missingTranslation.secondBeat,
         toValue: 0.82,
         useNativeDriver: true,
       }),
       Animated.timing(animation, {
-        duration: 120,
+        duration: runnerMotion.missingTranslation.settle,
         toValue: 1,
         useNativeDriver: true,
       }),
@@ -112,7 +115,7 @@ export const TaskWordFlow = memo(function TaskWordFlow({
 
   return (
     <View
-      style={wordFlowStyles.wordFlow}
+      style={[wordFlowStyles.wordFlow, centered && wordFlowStyles.wordFlowCentered]}
       onLayout={(event) => {
         const nextWidth = Math.floor(event.nativeEvent.layout.width);
         setWordFlowWidth((current) => (current === nextWidth ? current : nextWidth));
@@ -191,11 +194,14 @@ export const TaskWordFlow = memo(function TaskWordFlow({
           fittedContainerWidth: fittedTranslation.containerWidth,
           wordFlowWidth,
         });
-        const tokenLayoutWidth = getTokenLayoutWidth({
+        const baseTokenLayoutWidth = getTokenLayoutWidth({
           fallbackTokenWidth,
           measuredTokenWidth,
           phraseWidth: measuredTokenWidth,
         });
+        const tokenLayoutWidth = reserveTranslationWidth
+          ? Math.max(baseTokenLayoutWidth, translationMaxWidth)
+          : baseTokenLayoutWidth;
         const pulseNormalizedWord =
           match && shouldRenderTranslation ? match.focusNormalizedText ?? normalizedWord : tok.normalized;
         const pulseValue = getTokenPulseValue(pulseNormalizedWord);
@@ -221,10 +227,24 @@ export const TaskWordFlow = memo(function TaskWordFlow({
         const translationScale = missingIndicatorScale
           ? Animated.multiply(pulseScale, missingIndicatorScale)
           : pulseScale;
+        const interactionLabel = isPlaybackNavigationActive
+          ? `Seek playback to ${matchedTokenText}`
+          : isSelected
+            ? `Remove ${matchedTokenText} from vocabulary review`
+            : hasVocabularyEntryForToken
+              ? `Add ${matchedTokenText} to vocabulary review`
+              : `Check Armenian translation for ${matchedTokenText}`;
 
         return (
           <Pressable
             key={tok.key}
+            accessibilityLabel={interactionLabel}
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: isPending,
+              disabled: isPlaybackNavigationActive && segmentStartMs === null,
+              selected: isSelected,
+            }}
             onLayout={(event) => handleTokenPositionLayout(segmentId, event)}
             onPress={() => {
               if (isPlaybackNavigationActive) {

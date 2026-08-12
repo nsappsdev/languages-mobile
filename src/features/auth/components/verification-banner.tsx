@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { apiClient, ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
-import { border, brand, fontSize, fontWeight, neutral, radii, text } from '@/src/shared/theme';
+import {
+  border,
+  controlSize,
+  motion,
+  palette,
+  radii,
+  spacing,
+  status,
+  text,
+  typography,
+} from '@/src/shared/theme';
 import type { VerificationStatusResponse } from '@/src/types/domain';
 
 type Variant = 'card' | 'block';
@@ -106,9 +117,13 @@ export function VerificationBanner({ variant = 'card', title, body }: Props) {
   return (
     <View style={[styles.card, variant === 'block' ? styles.block : null]}>
       <View style={styles.headerRow}>
-        <Text style={styles.icon}>✉️</Text>
+        <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.iconWrap}>
+          <Ionicons color={palette.warning} name="mail-outline" size={24} />
+        </View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{resolvedTitle}</Text>
+          <Text accessibilityRole="header" style={styles.title}>
+            {resolvedTitle}
+          </Text>
           <Text style={styles.body}>{resolvedBody}</Text>
         </View>
       </View>
@@ -119,13 +134,22 @@ export function VerificationBanner({ variant = 'card', title, body }: Props) {
         </Text>
       ) : null}
 
-      {feedback ? <Text style={styles.feedback}>{feedback}</Text> : null}
-      {errorMsg ? <Text style={styles.error}>{errorMsg}</Text> : null}
+      {feedback ? (
+        <Text accessibilityLiveRegion="polite" style={styles.feedback}>
+          {feedback}
+        </Text>
+      ) : null}
+      {errorMsg ? (
+        <Text accessibilityLiveRegion="polite" style={styles.error}>
+          {errorMsg}
+        </Text>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Resend verification email"
+          accessibilityState={{ busy: isSending, disabled: buttonDisabled }}
           disabled={buttonDisabled}
           onPress={() => {
             void handleResend();
@@ -136,7 +160,7 @@ export function VerificationBanner({ variant = 'card', title, body }: Props) {
             pressed && !buttonDisabled && styles.buttonPressed,
           ]}>
           {isSending ? (
-            <ActivityIndicator color={neutral[0]} size="small" />
+            <ActivityIndicator color={text.inverse} size="small" />
           ) : (
             <Text style={styles.buttonText}>{buttonLabel}</Text>
           )}
@@ -158,85 +182,88 @@ export function VerificationBanner({ variant = 'card', title, body }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fffbeb',
+    backgroundColor: status.warningBg,
     borderColor: border.warning,
-    borderRadius: radii.xl,
+    borderRadius: radii['2xl'],
     borderWidth: 1,
-    gap: 12,
-    padding: 16,
+    gap: spacing[3],
+    padding: spacing[4],
   },
   block: {
-    marginTop: 16,
+    marginTop: spacing[1],
   },
   headerRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
+    gap: spacing[3],
   },
-  icon: {
-    fontSize: 24,
+  iconWrap: {
+    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderRadius: radii.full,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
   headerText: {
     flex: 1,
-    gap: 4,
+    gap: spacing[1],
   },
   title: {
     color: text.primary,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
+    ...typography.cardTitle,
   },
   body: {
     color: text.secondary,
-    fontSize: fontSize.base,
-    lineHeight: 20,
+    ...typography.body,
   },
   meta: {
     color: text.muted,
-    fontSize: fontSize.sm,
+    ...typography.caption,
   },
   feedback: {
-    color: brand[800],
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+    color: text.brand,
+    ...typography.label,
   },
   error: {
     color: text.error,
-    fontSize: fontSize.base,
+    ...typography.label,
   },
   actions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: spacing[2],
   },
   button: {
-    backgroundColor: brand[700],
-    borderRadius: radii.md,
-    minHeight: 42,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    alignItems: 'center',
+    backgroundColor: palette.primary,
+    borderRadius: radii.lg,
+    justifyContent: 'center',
+    minHeight: controlSize.minimumTarget,
+    paddingHorizontal: spacing[4],
   },
   buttonDisabled: {
-    backgroundColor: neutral[400],
+    opacity: motion.disabledOpacity,
   },
   buttonPressed: {
-    opacity: 0.85,
+    opacity: motion.pressedOpacity,
   },
   buttonText: {
-    color: neutral[0],
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold,
+    color: text.inverse,
+    ...typography.label,
   },
   secondaryButton: {
-    borderColor: border.default,
-    borderRadius: radii.md,
+    alignItems: 'center',
+    backgroundColor: palette.surface,
+    borderColor: border.strong,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    minHeight: 42,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    justifyContent: 'center',
+    minHeight: controlSize.minimumTarget,
+    paddingHorizontal: spacing[4],
   },
   secondaryButtonText: {
-    color: text.primary,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold,
+    color: text.brand,
+    ...typography.label,
   },
 });

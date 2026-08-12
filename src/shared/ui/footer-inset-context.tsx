@@ -9,7 +9,7 @@ interface FooterInsetContextValue {
 }
 
 const FooterInsetContext = createContext<FooterInsetContextValue>({
-  footerHeight: 90,
+  footerHeight: 0,
   onFooterLayout: () => {},
 });
 

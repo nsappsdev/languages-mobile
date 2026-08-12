@@ -4,13 +4,17 @@ import {
   TOKEN_WORD_HORIZONTAL_PADDING,
   TOKEN_WORD_LINE_HEIGHT,
 } from '@/src/features/tasks/constants/task-runner';
-import { fontWeight, radii, text } from '@/src/shared/theme';
+import { fontWeight, palette, radii, text } from '@/src/shared/theme';
 
 export const wordFlowStyles = StyleSheet.create({
   wordFlow: {
     alignItems: 'flex-end',
     flexDirection: 'row',
     flexWrap: 'wrap',
+  },
+  wordFlowCentered: {
+    justifyContent: 'center',
+    width: '100%',
   },
   wordWhitespace: {
     color: text.primary,
@@ -30,7 +34,7 @@ export const wordFlowStyles = StyleSheet.create({
     position: 'relative',
   },
   tokenTranslation: {
-    color: '#0f766e',
+    color: palette.primary,
     fontSize: 10,
     fontWeight: fontWeight.bold,
     lineHeight: 13,
@@ -42,7 +46,7 @@ export const wordFlowStyles = StyleSheet.create({
     opacity: 0,
   },
   tokenTranslationMissing: {
-    color: '#dc2626',
+    color: palette.danger,
   },
   tokenWord: {
     borderRadius: radii.sm,
@@ -52,15 +56,15 @@ export const wordFlowStyles = StyleSheet.create({
     paddingHorizontal: TOKEN_WORD_HORIZONTAL_PADDING,
   },
   tokenWordActive: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: palette.primarySoft,
   },
   tokenWordSaved: {
-    color: '#1d4ed8',
+    color: palette.primary,
   },
   tokenWordUnknown: {
-    color: '#c2410c',
+    color: palette.accentStrong,
   },
   tokenWordPending: {
-    color: '#b45309',
+    color: palette.warning,
   },
 });

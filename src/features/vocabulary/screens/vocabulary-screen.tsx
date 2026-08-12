@@ -1,14 +1,13 @@
 import { useAudioPlayer } from 'expo-audio';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 import { resolveApiAssetUrl } from '@/src/config/env';
 import { ensureAudioCached } from '@/src/features/tasks/services/audio-cache';
+import { LearnedVocabularyArchive } from '@/src/features/vocabulary/components/learned-vocabulary-archive';
+import { VocabularyDashboard } from '@/src/features/vocabulary/components/vocabulary-dashboard';
+import { VocabularyLessonReview } from '@/src/features/vocabulary/components/vocabulary-lesson-review';
 import { VocabularyOverview } from '@/src/features/vocabulary/components/vocabulary-overview';
-import {
-  VocabularyLearnedArchive,
-  VocabularyLessonDashboard,
-  VocabularyLessonReview,
-} from '@/src/features/vocabulary/components/vocabulary-section-list';
+import { VocabularyBackButton } from '@/src/features/vocabulary/components/vocabulary-shared';
 import { VocabularyStateScreen } from '@/src/features/vocabulary/components/vocabulary-state-screen';
 import { useVocabularyData } from '@/src/features/vocabulary/hooks/use-vocabulary-data';
 import {
@@ -18,6 +17,7 @@ import {
   type VocabularyAudioRange,
 } from '@/src/features/vocabulary/services/lesson-vocabulary';
 import { useSession } from '@/src/shared/auth/session-context';
+import { FeedbackState } from '@/src/shared/ui/feedback-state';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import { styles } from '@/src/features/vocabulary/screens/vocabulary-screen.styles';
 
@@ -105,60 +105,53 @@ export function VocabularyScreen() {
 
   if (!token || !userId) {
     return (
-      <VocabularyStateScreen>
-        <Text style={styles.meta}>Sign in to view vocabulary.</Text>
-      </VocabularyStateScreen>
+      <VocabularyStateScreen
+        message="Your saved words are available after you sign in."
+        title="Sign in to view vocabulary"
+      />
     );
   }
 
   if (isLoading) {
-    return (
-      <VocabularyStateScreen>
-        <ActivityIndicator size="large" />
-        <Text style={styles.meta}>Loading vocabulary...</Text>
-      </VocabularyStateScreen>
-    );
+    return <VocabularyStateScreen loading title="Loading vocabulary" />;
   }
 
   if (error && view === 'dashboard') {
     return (
-      <VocabularyStateScreen>
-        <Text style={styles.error}>{error}</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => void fetchSummaries()}
-          style={styles.retryButton}>
-          <Text style={styles.retryText}>Retry</Text>
-        </Pressable>
-      </VocabularyStateScreen>
+      <VocabularyStateScreen
+        actionLabel="Retry"
+        message={error}
+        onAction={() => void fetchSummaries()}
+        title="Vocabulary could not load"
+      />
     );
   }
 
   return (
     <ScreenContainer>
       {view === 'dashboard' ? (
-        <>
-          <VocabularyOverview
-            activeCount={activeCount}
-            learnedCount={learnedCount}
-            syncMeta={syncMeta}
-          />
-          <VocabularyLessonDashboard
-            isRefreshing={isRefreshing}
-            onOpenArchive={() => {
-              setView('archive');
-              void openArchive();
-            }}
-            onOpenLesson={(lessonId) => {
-              setSelectedSection(null);
-              setSelectedLessonId(lessonId);
-              setView('lesson');
-              void openLesson(lessonId);
-            }}
-            onRefresh={() => void fetchSummaries(true)}
-            summaries={summaries}
-          />
-        </>
+        <VocabularyDashboard
+          header={
+            <VocabularyOverview
+              activeCount={activeCount}
+              learnedCount={learnedCount}
+              syncMeta={syncMeta}
+            />
+          }
+          isRefreshing={isRefreshing}
+          onOpenArchive={() => {
+            setView('archive');
+            void openArchive();
+          }}
+          onOpenLesson={(lessonId) => {
+            setSelectedSection(null);
+            setSelectedLessonId(lessonId);
+            setView('lesson');
+            void openLesson(lessonId);
+          }}
+          onRefresh={() => void fetchSummaries(true)}
+          summaries={summaries}
+        />
       ) : null}
 
       {view === 'lesson' ? (
@@ -169,6 +162,7 @@ export function VocabularyScreen() {
             onPlayWord={playWord}
             onReview={reviewWord}
             section={selectedSection}
+            syncMeta={syncMeta}
           />
         ) : isLoadingView ? (
           <LoadingView onBack={backToDashboard} text="Loading lesson vocabulary..." />
@@ -187,10 +181,11 @@ export function VocabularyScreen() {
         isLoadingView && archiveSections.length === 0 ? (
           <LoadingView onBack={backToDashboard} text="Loading learned words..." />
         ) : (
-          <VocabularyLearnedArchive
+          <LearnedVocabularyArchive
             onBack={backToDashboard}
             onRestore={(section, row) => void restoreWord(section, row)}
             sections={archiveSections}
+            syncMeta={syncMeta}
           />
         )
       ) : null}
@@ -200,12 +195,11 @@ export function VocabularyScreen() {
 
 function LoadingView({ onBack, text }: { onBack: () => void; text: string }) {
   return (
-    <View style={styles.loadingView}>
-      <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
-        <Text style={styles.backButtonText}>Back</Text>
-      </Pressable>
-      <ActivityIndicator size="large" />
-      <Text style={styles.meta}>{text}</Text>
+    <View style={styles.subview}>
+      <View style={styles.subviewBack}>
+        <VocabularyBackButton label="Back to vocabulary lessons" onPress={onBack} />
+      </View>
+      <FeedbackState loading title={text} />
     </View>
   );
 }
@@ -220,14 +214,16 @@ function LessonLoadError({
   onRetry: () => void;
 }) {
   return (
-    <View style={styles.loadingView}>
-      <Pressable accessibilityRole="button" onPress={onBack} style={styles.backButton}>
-        <Text style={styles.backButtonText}>Back</Text>
-      </Pressable>
-      <Text style={styles.error}>{error}</Text>
-      <Pressable accessibilityRole="button" onPress={onRetry} style={styles.retryButton}>
-        <Text style={styles.retryText}>Retry</Text>
-      </Pressable>
+    <View style={styles.subview}>
+      <View style={styles.subviewBack}>
+        <VocabularyBackButton label="Back to vocabulary lessons" onPress={onBack} />
+      </View>
+      <FeedbackState
+        actionLabel="Retry"
+        message={error}
+        onAction={onRetry}
+        title="Lesson vocabulary could not load"
+      />
     </View>
   );
 }

@@ -27,11 +27,18 @@ import {
   ReadingModeDock,
   RunnerMessageScreen,
 } from '@/src/features/tasks/components/task-runner-layout';
-import { TaskWordFlow } from '@/src/features/tasks/components/task-word-flow';
+import {
+  RunnerItemCard,
+  RunnerNavigationActions,
+} from '@/src/features/tasks/components/task-runner-content';
+import { PagedRunnerContent } from '@/src/features/tasks/components/task-runner-paged';
+import type { TaskWordFlowProps } from '@/src/features/tasks/components/task-word-flow.types';
 import { useReadingModePlayback } from '@/src/features/tasks/hooks/use-reading-mode-playback';
 import { useRunnerAudio } from '@/src/features/tasks/hooks/use-runner-audio';
 import { useRunnerVocabulary } from '@/src/features/tasks/hooks/use-runner-vocabulary';
 import { useTaskRunnerData } from '@/src/features/tasks/hooks/use-task-runner-data';
+import { runnerMotion } from '@/src/features/tasks/theme/runner-motion';
+import { runnerTypography } from '@/src/features/tasks/theme/runner-typography';
 import {
   calculateCompletion,
   calculateTopSegmentScrollOffset,
@@ -49,6 +56,7 @@ import type { ProgressEvent } from '@/src/types/domain';
 
 interface TaskRunnerScreenProps {
   lessonId: string;
+  presentation?: 'continuous' | 'paged';
 }
 
 type SegmentLayoutBounds = {
@@ -58,7 +66,10 @@ type SegmentLayoutBounds = {
 
 const ACTIVE_SEGMENT_SCROLL_TOP_PADDING = 24;
 
-export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
+export function TaskRunnerScreen({
+  lessonId,
+  presentation = 'continuous',
+}: TaskRunnerScreenProps) {
   const router = useRouter();
   const { token, user } = useSession();
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
@@ -116,12 +127,13 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
     currentAudioUrl,
     currentItem,
     nextAudioUrl,
+    progressUpdateIntervalMs: presentation === 'paged' ? 250 : 1000,
   });
   const isPlaying = playbackStatus.playing;
 
   const handleGoToDashboard = useCallback(() => {
-    router.replace('/(tabs)/lessons');
-  }, [router]);
+    router.replace(presentation === 'paged' ? '/(tabs)/lessons-2' : '/(tabs)/lessons');
+  }, [presentation, router]);
 
   const triggerTokenFeedback = useCallback((normalizedWord: string) => {
     const pulseValue = tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
@@ -131,14 +143,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       Animated.sequence([
         Animated.timing(pulseValue, {
           toValue: 1,
-          duration: 260,
+          duration: runnerMotion.tokenFeedback.rise,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        Animated.delay(120),
+        Animated.delay(runnerMotion.tokenFeedback.hold),
         Animated.timing(pulseValue, {
           toValue: 0,
-          duration: 360,
+          duration: runnerMotion.tokenFeedback.fall,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -152,11 +164,14 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       const pulseValue =
         tokenPulseValuesRef.current.get(normalizedWord) ?? new Animated.Value(0);
       tokenPulseValuesRef.current.set(normalizedWord, pulseValue);
-      const riseDuration = 320;
-      const fallDuration = 420;
+      const riseDuration = runnerMotion.translationHeartbeat.rise;
+      const fallDuration = runnerMotion.translationHeartbeat.fall;
       const holdDuration = Math.max(
-        160,
-        Math.min(durationMs - riseDuration - fallDuration, 650),
+        runnerMotion.translationHeartbeat.minHold,
+        Math.min(
+          durationMs - riseDuration - fallDuration,
+          runnerMotion.translationHeartbeat.maxHold,
+        ),
       );
 
       pulseValue.stopAnimation(() => {
@@ -435,6 +450,11 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
       unknownNormalizedWords,
       wordRepetitionPauseMs: appSettings?.wordRepetitionPauseMs ?? 800,
     });
+  const primaryReadingMode =
+    readingModes.find((mode) => mode.id === activeModeId) ?? readingModes[0] ?? null;
+  const primaryModeDisabledReason = primaryReadingMode
+    ? getModeDisabledReason(primaryReadingMode.id)
+    : 'No reading mode is available.';
 
   useEffect(() => {
     resetVocabularyForItem();
@@ -449,10 +469,18 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
 
   const translationFitSettings = useMemo(
     () => ({
-      maxFontSize: appSettings?.translationFontMaxSize ?? appSettings?.translationFontSize ?? 15,
-      maxLetterSpacing: appSettings?.translationLetterSpacingMax ?? 0.8,
-      minFontSize: appSettings?.translationFontMinSize ?? 8,
-      minLetterSpacing: appSettings?.translationLetterSpacingMin ?? -0.2,
+      maxFontSize:
+        appSettings?.translationFontMaxSize ??
+        appSettings?.translationFontSize ??
+        runnerTypography.translationDefaultMaxSize,
+      maxLetterSpacing:
+        appSettings?.translationLetterSpacingMax ??
+        runnerTypography.translationDefaultMaxLetterSpacing,
+      minFontSize:
+        appSettings?.translationFontMinSize ?? runnerTypography.translationDefaultMinSize,
+      minLetterSpacing:
+        appSettings?.translationLetterSpacingMin ??
+        runnerTypography.translationDefaultMinLetterSpacing,
     }),
     [
       appSettings?.translationFontMaxSize,
@@ -621,87 +649,105 @@ export function TaskRunnerScreen({ lessonId }: TaskRunnerScreenProps) {
   const durationSeconds = playbackStatus.duration ?? 0;
   const currentSeconds = playbackStatus.currentTime ?? 0;
   const audioSourceLabel = playableAudioUrl?.startsWith('file://') ? 'Cached' : 'Streaming';
+  const wordFlowProps: TaskWordFlowProps = {
+    activeSegmentId,
+    entryCacheByText,
+    getTokenPulseValue,
+    handleSeekToSegment,
+    handleTokenPositionLayout,
+    handleTokenWordLayout,
+    handleToggleWordVocabulary,
+    isPlaying,
+    isPlaybackNavigationActive: isPlaying,
+    mainTextFontFamily,
+    mainTextFontSize,
+    mainTextLineHeight,
+    onLayout: handleWordFlowLayout,
+    pendingWords,
+    segmentStartById,
+    tokenSegmentIds,
+    tokenWidths,
+    translationFitSettings,
+    translationFontFamily,
+    triggerTokenFeedback,
+    unknownTaps,
+    vocabularyByText,
+    vocabularyTokenMatches,
+    wordTokens,
+  };
 
   return (
-    <ScreenContainer>
+    <ScreenContainer maxWidth={680}>
       <View style={styles.runnerLayout}>
+        {presentation === 'continuous' ? (
+          <LessonRunnerHeader
+            lessonTitle={lesson.title}
+            onBack={handleGoToDashboard}
+            progressText={progressText}
+          />
+        ) : null}
+
         <ReadingModeDock
           activeModeId={activeModeId}
           getDisabledReason={getModeDisabledReason}
           modes={readingModes}
           onToggleMode={handleToggleReadingMode}
           playing={playbackStatus.playing}
+          variant={presentation === 'paged' ? 'book' : 'dock'}
         />
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
-          <LessonRunnerHeader
-            lessonTitle={lesson.title}
-            onBack={handleGoToDashboard}
-            progressText={progressText}
+        {presentation === 'paged' ? (
+          <PagedRunnerContent
+            audioSource={
+              isAudioCaching ? 'Caching...' : playableAudioUrl ? audioSourceLabel : 'No audio'
+            }
+            currentSeconds={currentSeconds}
+            currentItem={currentItem}
+            currentItemIndex={currentItemIndex}
+            isFirstItem={currentItemIndex === 0}
+            isLastItem={currentItemIndex === items.length - 1}
+            isPlaying={isPlaying}
+            onNextItem={() => {
+              void handleGoNext();
+            }}
+            onPreviousItem={handleGoPrevious}
+            onTogglePlayback={() => {
+              if (primaryReadingMode) handleToggleReadingMode(primaryReadingMode);
+            }}
+            pageTargetSegmentId={playbackStatus.pageTargetSegmentId}
+            playbackDisabledReason={primaryModeDisabledReason}
+            playbackModeLabel={primaryReadingMode?.displayName ?? 'Introduction'}
+            durationSeconds={durationSeconds}
+            syncError={syncError}
+            vocabularyNotice={vocabularyNotice}
+            wordFlowProps={wordFlowProps}
           />
+        ) : (
+          <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
+            <LessonProgressOverview completion={completion} />
 
-          <LessonProgressOverview completion={completion} />
-
-          <View style={styles.card}>
-            <View style={styles.cardTopRow}>
-              <Text style={styles.itemLabel}>Item {currentItemIndex + 1}</Text>
-              <View style={styles.audioMetaRow}>
-                <Text style={styles.audioMeta}>
-                  {isAudioCaching ? 'Caching...' : playableAudioUrl ? audioSourceLabel : 'No audio'}
-                </Text>
-                <Text style={styles.audioMeta}>
-                  {formatSeconds(currentSeconds)} / {formatSeconds(durationSeconds)}
-                </Text>
-              </View>
-            </View>
-
-            <TaskWordFlow
-              activeSegmentId={activeSegmentId}
-              entryCacheByText={entryCacheByText}
-              getTokenPulseValue={getTokenPulseValue}
-              handleSeekToSegment={handleSeekToSegment}
-              handleTokenPositionLayout={handleTokenPositionLayout}
-              handleTokenWordLayout={handleTokenWordLayout}
-              handleToggleWordVocabulary={handleToggleWordVocabulary}
-              isPlaying={isPlaying}
-              isPlaybackNavigationActive={isPlaying}
-              mainTextFontFamily={mainTextFontFamily}
-              mainTextFontSize={mainTextFontSize}
-              mainTextLineHeight={mainTextLineHeight}
-              onLayout={handleWordFlowLayout}
-              pendingWords={pendingWords}
-              segmentStartById={segmentStartById}
-              tokenSegmentIds={tokenSegmentIds}
-              tokenWidths={tokenWidths}
-              translationFitSettings={translationFitSettings}
-              translationFontFamily={translationFontFamily}
-              triggerTokenFeedback={triggerTokenFeedback}
-              unknownTaps={unknownTaps}
-              vocabularyByText={vocabularyByText}
-              vocabularyTokenMatches={vocabularyTokenMatches}
-              wordTokens={wordTokens}
+            <RunnerItemCard
+              audioSource={
+                isAudioCaching ? 'Caching...' : playableAudioUrl ? audioSourceLabel : 'No audio'
+              }
+              audioTime={`${formatSeconds(currentSeconds)} / ${formatSeconds(durationSeconds)}`}
+              itemNumber={currentItemIndex + 1}
+              vocabularyNotice={vocabularyNotice}
+              wordFlowProps={wordFlowProps}
             />
 
-            {vocabularyNotice ? <Text style={styles.notice}>{vocabularyNotice}</Text> : null}
-          </View>
+            {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
 
-          {syncError ? <Text style={styles.syncError}>{syncError}</Text> : null}
-
-          <View style={styles.navigationRow}>
-            <PrimaryButton
-              title="Previous"
-              variant="secondary"
-              onPress={handleGoPrevious}
-              disabled={currentItemIndex === 0}
-            />
-            <PrimaryButton
-              title={currentItemIndex === items.length - 1 ? 'Finish Lesson' : 'Next Item'}
-              onPress={() => {
+            <RunnerNavigationActions
+              isFirstItem={currentItemIndex === 0}
+              isLastItem={currentItemIndex === items.length - 1}
+              onNext={() => {
                 void handleGoNext();
               }}
+              onPrevious={handleGoPrevious}
             />
-          </View>
-        </ScrollView>
+          </ScrollView>
+        )}
       </View>
     </ScreenContainer>
   );

@@ -1,20 +1,13 @@
 import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AuthShell } from '@/src/features/auth/components/auth-shell';
 import { validateEmail, validateName, validatePassword } from '@/src/features/auth/utils/validators';
 import { ApiError } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
+import { spacing, status, text, typography } from '@/src/shared/theme';
 import { PrimaryButton } from '@/src/shared/ui/primary-button';
-import { ScreenContainer } from '@/src/shared/ui/screen-container';
-import { border, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import { TextField } from '@/src/shared/ui/text-field';
 
 export function SignupScreen() {
   const router = useRouter();
@@ -57,129 +50,107 @@ export function SignupScreen() {
   };
 
   return (
-    <ScreenContainer>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Create account</Text>
-          <Text style={styles.subtitle}>Sign up to start learning.</Text>
-        </View>
+    <AuthShell
+      eyebrow="Begin with the essentials"
+      title="Create account"
+      subtitle="Build your English vocabulary through guided text and audio lessons.">
+      <View style={styles.form}>
+        <TextField
+          autoCapitalize="words"
+          autoComplete="name"
+          label="Name"
+          onChangeText={setName}
+          onSubmitEditing={() => emailRef.current?.focus()}
+          placeholder="Your full name"
+          returnKeyType="next"
+          value={name}
+        />
 
-        <View style={styles.form}>
-          <View style={styles.field}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              autoCapitalize="words"
-              autoComplete="name"
-              onChangeText={setName}
-              onSubmitEditing={() => emailRef.current?.focus()}
-              placeholder="Your full name"
-              placeholderTextColor={neutral[400]}
-              returnKeyType="next"
-              style={styles.input}
-              value={name}
-            />
+        <TextField
+          ref={emailRef}
+          autoCapitalize="none"
+          autoComplete="email"
+          keyboardType="email-address"
+          label="Email"
+          onChangeText={setEmail}
+          onSubmitEditing={() => passwordRef.current?.focus()}
+          placeholder="you@example.com"
+          returnKeyType="next"
+          value={email}
+        />
+
+        <TextField
+          ref={passwordRef}
+          autoCapitalize="none"
+          label="Password"
+          onChangeText={setPassword}
+          onSubmitEditing={() => {
+            void handleSignup();
+          }}
+          placeholder="At least 6 characters, letters + numbers"
+          returnKeyType="done"
+          secureTextEntry
+          value={password}
+        />
+
+        {error ? (
+          <View accessibilityLiveRegion="polite" style={styles.errorNotice}>
+            <Text style={styles.error}>{error}</Text>
           </View>
+        ) : null}
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              ref={emailRef}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-              onChangeText={setEmail}
-              onSubmitEditing={() => passwordRef.current?.focus()}
-              placeholder="you@example.com"
-              placeholderTextColor={neutral[400]}
-              returnKeyType="next"
-              style={styles.input}
-              value={email}
-            />
-          </View>
+        <PrimaryButton
+          title={isSubmitting ? 'Creating account…' : 'Create account'}
+          onPress={() => {
+            void handleSignup();
+          }}
+          loading={isSubmitting}
+          disabled={!name.trim() || !email.trim() || !password}
+        />
 
-          <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              ref={passwordRef}
-              autoCapitalize="none"
-              onChangeText={setPassword}
-              onSubmitEditing={handleSignup}
-              placeholder="At least 6 chars, letters + numbers"
-              placeholderTextColor={neutral[400]}
-              returnKeyType="done"
-              secureTextEntry
-              style={styles.input}
-              value={password}
-            />
-          </View>
-
-          {error ? <Text style={styles.error}>{error}</Text> : null}
-
-          <PrimaryButton
-            title={isSubmitting ? 'Creating Account...' : 'Sign Up'}
-            onPress={handleSignup}
-            loading={isSubmitting}
-            disabled={!name.trim() || !email.trim() || !password}
-          />
-
-          <Pressable onPress={() => router.replace('/(auth)/login')}>
-            <Text style={styles.hint}>Already have an account? Sign in.</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
-    </ScreenContainer>
+        <Pressable
+          accessibilityHint="Returns to the sign in form"
+          accessibilityRole="link"
+          onPress={() => router.replace('/(auth)/login')}
+          style={({ pressed }) => [styles.authLink, pressed && styles.authLinkPressed]}>
+          <Text style={styles.hint}>
+            Already have an account? <Text style={styles.hintAction}>Sign in</Text>
+          </Text>
+        </Pressable>
+      </View>
+    </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  keyboardView: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  header: {
-    marginBottom: 28,
-  },
-  title: {
-    color: text.primary,
-    fontSize: fontSize['4xl'],
-    fontWeight: fontWeight.bold,
-    marginBottom: 8,
-  },
-  subtitle: {
-    color: text.secondary,
-    fontSize: fontSize.lg,
-    lineHeight: 22,
-  },
   form: {
-    gap: 16,
+    gap: spacing[4],
   },
-  field: {
-    gap: 8,
-  },
-  label: {
-    color: text.primary,
-    fontSize: fontSize.md,
-    fontWeight: fontWeight.semibold,
-  },
-  input: {
-    backgroundColor: surface.input,
-    borderColor: border.default,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    color: text.primary,
-    fontSize: fontSize.lg,
-    minHeight: 48,
-    paddingHorizontal: 12,
+  errorNotice: {
+    backgroundColor: status.errorBg,
+    borderRadius: 12,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[2],
   },
   error: {
     color: text.error,
-    fontSize: fontSize.md,
+    ...typography.label,
+  },
+  authLink: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: spacing[2],
+  },
+  authLinkPressed: {
+    opacity: 0.86,
   },
   hint: {
     color: text.secondary,
-    fontSize: fontSize.sm,
     textAlign: 'center',
+    ...typography.label,
+  },
+  hintAction: {
+    color: text.brand,
   },
 });
