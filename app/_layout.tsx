@@ -16,8 +16,6 @@ export default function RootLayout() {
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="runner/[lessonId]" />
-            <Stack.Screen name="runner-2/[lessonId]" />
-            <Stack.Screen name="results/[lessonId]" />
           </Stack>
           <AppUpdateNotice />
           <StatusBar style="dark" />

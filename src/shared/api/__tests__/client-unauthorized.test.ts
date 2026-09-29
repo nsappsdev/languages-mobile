@@ -111,7 +111,7 @@ describe('api client unauthorized handling', () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
-  it('requests lesson timings without HTTP cache reuse', async () => {
+  it('requests the immutable learner manifest without HTTP cache reuse', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -121,10 +121,8 @@ describe('api client unauthorized handling', () => {
     await apiClient.getLesson('token', 'lesson-1');
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toMatch(/^http:\/\/localhost:4000\/api\/lessons\/lesson-1\?fresh=\d+$/);
+    expect(url).toBe('http://localhost:4000/api/learner/lessons/lesson-1/manifest');
     expect(init?.cache).toBe('no-store');
-    expect((init?.headers as Headers).get('Cache-Control')).toBe('no-cache, no-store');
-    expect((init?.headers as Headers).get('Pragma')).toBe('no-cache');
   });
 
   it('fails a stalled native request with a retryable timeout error', async () => {
@@ -138,7 +136,7 @@ describe('api client unauthorized handling', () => {
         }),
     );
 
-    const response = apiClient.getVocabularyLessonSummaries('token');
+    const response = apiClient.getWords('token');
     jest.advanceTimersByTime(API_REQUEST_TIMEOUT_MS);
 
     await expect(response).rejects.toEqual(

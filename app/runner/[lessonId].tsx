@@ -1,20 +1,12 @@
 import { Redirect, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
-import { TaskRunnerScreen } from '@/src/features/tasks/screens/task-runner-screen';
+import { ActivityIndicator, View } from 'react-native';
+import { ReaderScreen } from '@/src/features/reader/reader-screen';
 import { useSession } from '@/src/shared/auth/session-context';
 
-export default function TaskRunnerRoute() {
+export default function ReaderRoute() {
   const { lessonId } = useLocalSearchParams<{ lessonId: string }>();
-  const { token, user, refreshProfile } = useSession();
-
-  useEffect(() => {
-    if (!token) return;
-    refreshProfile().catch(() => null);
-  }, [refreshProfile, token]);
-
-  if (user && user.emailVerified !== true) {
-    return <Redirect href="/(tabs)/lessons" />;
-  }
-
-  return <TaskRunnerScreen lessonId={lessonId ?? ''} />;
+  const { isAuthenticated, isInitializing } = useSession();
+  if (isInitializing) return <View><ActivityIndicator /></View>;
+  if (!isAuthenticated) return <Redirect href="/(auth)/login" />;
+  return <ReaderScreen key={lessonId} lessonId={lessonId ?? ''} />;
 }
