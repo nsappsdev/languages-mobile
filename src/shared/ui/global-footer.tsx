@@ -16,27 +16,19 @@ const FOOTER_ITEMS: {
 }[] = [
   {
     key: 'lessons',
-    label: 'Dashboard',
+    label: 'Lessons',
     icon: 'home-outline',
     activeIcon: 'home',
     href: '/(tabs)/lessons',
-    matches: [],
-  },
-  {
-    key: 'lessons-2',
-    label: 'Lessons 2',
-    icon: 'reader-outline',
-    activeIcon: 'reader',
-    href: '/(tabs)/lessons-2',
-    matches: [],
+    matches: ['/lessons'],
   },
   {
     key: 'vocabulary',
-    label: 'Vocabulary',
+    label: 'Library',
     icon: 'book-outline',
     activeIcon: 'book',
     href: '/(tabs)/vocabulary',
-    matches: [],
+    matches: ['/vocabulary'],
   },
   {
     key: 'profile',
@@ -44,7 +36,7 @@ const FOOTER_ITEMS: {
     icon: 'person-outline',
     activeIcon: 'person',
     href: '/(tabs)/profile',
-    matches: [],
+    matches: ['/profile'],
   },
 ];
 

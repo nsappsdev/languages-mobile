@@ -25,7 +25,6 @@ export default function TabLayout() {
       <View style={styles.shell}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="lessons" />
-          <Stack.Screen name="lessons-2" />
           <Stack.Screen name="vocabulary" />
           <Stack.Screen name="profile" />
         </Stack>

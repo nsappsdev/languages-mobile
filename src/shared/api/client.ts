@@ -1,24 +1,7 @@
 import { API_BASE_URL } from '@/src/config/env';
-import type {
-  GoogleSignInResponse,
-  LearnerVocabularyItem,
-  LearnerVocabularyStatus,
-  LessonVocabularyReviewItem,
-  VocabularyLessonSummary,
-  VocabularyReviewDecision,
-  Lesson,
-  LoginResponse,
-  AppSettings,
-  AppPlatform,
-  AppVersionResponse,
-  ProgressEvent,
-  ResendVerificationResponse,
-  SignupResponse,
-  User,
-  VerificationStatusResponse,
-  VocabularyEntry,
-  VocabularyKind,
-} from '@/src/types/domain';
+import type { GoogleSignInResponse, LoginResponse, AppSettings, AppPlatform, AppVersionResponse,
+  ResendVerificationResponse, SignupResponse, User, VerificationStatusResponse } from '@/src/types/domain';
+import type { ReaderLessonSummary, ReaderResponse, ReaderWord, ReaderChange } from '@/src/features/reader/types';
 
 export class ApiError extends Error {
   status: number;
@@ -36,6 +19,7 @@ export class ApiError extends Error {
 
 type RequestOptions = RequestInit & {
   token?: string | null;
+  responseType?: 'blob';
 };
 
 export const API_REQUEST_TIMEOUT_MS = 20_000;
@@ -58,7 +42,7 @@ export function setApiUnauthorizedHandler(handler: UnauthorizedHandler | null) {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { token, ...init } = options;
+  const { token, responseType, ...init } = options;
 
   const execute = async (currentToken: string | null, allowRefresh: boolean): Promise<T> => {
     const headers = new Headers(init.headers);
@@ -106,6 +90,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       upstreamSignal?.removeEventListener('abort', abortFromUpstream);
     }
 
+    if (response.ok && responseType === 'blob') return await response.blob() as T;
     const text = await response.text();
     const payload = text ? tryParseJson(text) : null;
 
@@ -231,202 +216,33 @@ export const apiClient = {
   },
 
   getLessons(token: string) {
-    return request<{ lessons: Lesson[] }>('/lessons', {
-      method: 'GET',
-      token,
-    });
+    return request<{ lessons: ReaderLessonSummary[] }>('/learner/lessons', { token, cache: 'no-store' });
   },
-
   getLesson(token: string, lessonId: string) {
-    const freshness = Date.now();
-    return request<{ lesson: Lesson }>(`/lessons/${lessonId}?fresh=${freshness}`, {
-      cache: 'no-store',
-      headers: {
-        'Cache-Control': 'no-cache, no-store',
-        Pragma: 'no-cache',
-      },
-      method: 'GET',
-      token,
+    return request<ReaderResponse>(`/learner/lessons/${encodeURIComponent(lessonId)}/manifest`, { token, cache: 'no-store' });
+  },
+  getPublication(token: string, publicationId: string) {
+    return request<ReaderResponse>(`/learner/publications/${encodeURIComponent(publicationId)}`, { token, cache: 'no-store' });
+  },
+  getWords(token: string) {
+    return request<{ words: ReaderWord[] }>('/learner/words', { token, cache: 'no-store' });
+  },
+  saveReaderChange(token: string, change: ReaderChange) {
+    const { kind, ...body } = change;
+    return request(kind === 'word' ? '/learner/word-state' : '/learner/reader-progress', {
+      method: 'PUT', token, body: JSON.stringify(body),
     });
   },
-
+  getReaderAudio(token: string, publicationId: string, assetId: string) {
+    return request<Blob>(`/learner/audio-assets/${encodeURIComponent(assetId)}/content?publicationId=${encodeURIComponent(publicationId)}`, {
+      token, responseType: 'blob', cache: 'no-store',
+    });
+  },
   getSettings(token: string) {
-    return request<{ settings: AppSettings }>('/settings', {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
-      method: 'GET',
-      token,
-    });
+    return request<{ settings: AppSettings }>('/settings', { token, cache: 'no-store' });
   },
-
   getAppVersion(token: string, platform: AppPlatform, buildNumber: number) {
-    const params = new URLSearchParams({
-      platform,
-      buildNumber: String(buildNumber),
-    });
-    return request<AppVersionResponse>(`/app-version?${params.toString()}`, {
-      method: 'GET',
-      token,
-    });
-  },
-
-  sendProgressEvents(token: string, events: ProgressEvent[]) {
-    return request<{ accepted: number; received: number }>('/me/progress/events', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ events }),
-    });
-  },
-
-  getVocabularyEntries(token: string) {
-    return request<{
-      entries: VocabularyEntry[];
-      page: number;
-      pageSize: number;
-      total: number;
-      pageCount: number;
-    }>('/vocabulary?page=1&pageSize=10', {
-      method: 'GET',
-      token,
-    });
-  },
-
-  lookupVocabularyEntries(token: string, items: string[]) {
-    return request<{
-      entries: VocabularyEntry[];
-      resolved: number;
-      requested: number;
-    }>('/vocabulary/lookup', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ items }),
-    });
-  },
-
-  createVocabularyEntry(
-    token: string,
-    input: {
-      englishText: string;
-      kind?: VocabularyKind;
-      tags?: string[];
-      notes?: string;
-    },
-  ) {
-    return request<{ entry: VocabularyEntry }>('/vocabulary', {
-      method: 'POST',
-      token,
-      body: JSON.stringify(input),
-    });
-  },
-
-  getMyVocabulary(token: string) {
-    return request<{ vocabulary: LearnerVocabularyItem[] }>('/me/vocabulary', {
-      method: 'GET',
-      token,
-    });
-  },
-
-  addVocabularyToLearner(token: string, entryId: string) {
-    return request<{ vocabulary: LearnerVocabularyItem }>(`/me/vocabulary/${entryId}`, {
-      method: 'POST',
-      token,
-    });
-  },
-
-  removeVocabularyFromLearner(token: string, entryId: string) {
-    return request<{ message?: string }>(`/me/vocabulary/${entryId}`, {
-      method: 'DELETE',
-      token,
-    });
-  },
-
-  updateVocabularyStatus(token: string, entryId: string, status: LearnerVocabularyStatus) {
-    return request<{ vocabulary: LearnerVocabularyItem }>(`/me/vocabulary/${entryId}`, {
-      method: 'PATCH',
-      token,
-      body: JSON.stringify({ status }),
-    });
-  },
-
-  updateVocabularyStatusBulk(
-    token: string,
-    items: { entryId: string; status: LearnerVocabularyStatus }[],
-  ) {
-    return request<{
-      vocabulary: LearnerVocabularyItem[];
-      received: number;
-      applied: number;
-    }>('/me/vocabulary/bulk-status', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ items }),
-    });
-  },
-
-  resolveVocabularyPack(token: string, items: string[]) {
-    return request<{
-      vocabulary: LearnerVocabularyItem[];
-      resolved: number;
-      received: number;
-    }>('/me/vocabulary/pack', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ items }),
-    });
-  },
-
-  getLessonVocabulary(token: string, lessonId: string) {
-    return request<{
-      vocabulary: {
-        lessonId: string;
-        title: string;
-        description?: string | null;
-        status: string;
-        entries: LessonVocabularyReviewItem[];
-      };
-    }>(`/me/lessons/${lessonId}/vocabulary`, {
-      method: 'GET',
-      token,
-    });
-  },
-
-  getVocabularyLessonSummaries(token: string) {
-    return request<{ lessons: VocabularyLessonSummary[] }>('/me/vocabulary/lessons', {
-      method: 'GET',
-      token,
-    });
-  },
-
-  reviewLessonVocabulary(
-    token: string,
-    lessonId: string,
-    entryId: string,
-    decision: VocabularyReviewDecision,
-    idempotencyKey: string,
-  ) {
-    return request<{ review: LessonVocabularyReviewItem }>(
-      `/me/lessons/${lessonId}/vocabulary/${entryId}/review`,
-      {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ decision, idempotencyKey }),
-      },
-    );
-  },
-
-  updateLessonVocabularyStatus(
-    token: string,
-    lessonId: string,
-    entryId: string,
-    status: 'NEW' | 'LEARNING' | 'LEARNED',
-  ) {
-    return request<{ review: LessonVocabularyReviewItem }>(
-      `/me/lessons/${lessonId}/vocabulary/${entryId}`,
-      {
-        method: 'PATCH',
-        token,
-        body: JSON.stringify({ status }),
-      },
-    );
+    const params = new URLSearchParams({ platform, buildNumber: String(buildNumber) });
+    return request<AppVersionResponse>(`/app-version?${params}`, { token });
   },
 };

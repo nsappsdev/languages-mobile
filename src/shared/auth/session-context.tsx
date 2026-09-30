@@ -8,9 +8,9 @@ import {
   useRef,
   useState,
 } from 'react';
-import { setProgressSyncSession } from '@/src/features/progress/progress-sync';
-import { setVocabularyStatusSyncSession } from '@/src/features/vocabulary/services/vocabulary-status-sync';
-import { setVocabularyReviewSyncSession } from '@/src/features/vocabulary/services/vocabulary-review-sync';
+import { AppState } from 'react-native';
+import { setReaderSession, flushReaderChanges } from '@/src/features/reader/state-store';
+import { clearReaderAudio } from '@/src/features/reader/asset-cache';
 import {
   apiClient,
   ApiError,
@@ -60,6 +60,8 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
   const clearSession = useCallback(async () => {
     refreshPromiseRef.current = null;
+    setReaderSession(null, null);
+    await clearReaderAudio().catch(() => undefined);
     applySession({
       token: null,
       refreshToken: null,
@@ -268,19 +270,12 @@ export function SessionProvider({ children }: PropsWithChildren) {
   }, [applySession, clearSession]);
 
   useEffect(() => {
-    void setProgressSyncSession({
-      token,
-      userId: user?.id ?? null,
-    });
-    void setVocabularyStatusSyncSession({
-      token,
-      userId: user?.id ?? null,
-    });
-    void setVocabularyReviewSyncSession({
-      token,
-      userId: user?.id ?? null,
-    });
-  }, [token, user?.id]);
+    setReaderSession(token, user?.id ?? null);
+    if (!token || !user) return;
+    const timer = setInterval(() => { void flushReaderChanges(); }, 20000);
+    const listener = AppState.addEventListener('change', state => { if (state === 'active') void flushReaderChanges(); });
+    return () => { clearInterval(timer); listener.remove(); };
+  }, [token, user]);
 
   const value = useMemo<SessionContextValue>(
     () => ({
