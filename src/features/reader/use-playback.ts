@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { useFocusEffect } from 'expo-router';
 import { readerAudio } from './asset-cache';
 import type { PlaybackStep } from './model';
@@ -8,8 +8,8 @@ import type { PlaybackStep } from './model';
 type Checkpoint = { steps: PlaybackStep[]; index: number; position: number; pauseMs: number; publicationId: string };
 
 export function usePlayback(token: string, userId: string, publicationId: string) {
-  const narrationPlayer = useAudioPlayer(null, { updateInterval: 50 });
-  const drillPlayer = useAudioPlayer(null, { updateInterval: 50 });
+  const [narrationPlayer] = useState(() => createAudioPlayer(null, { updateInterval: 50 }));
+  const [drillPlayer] = useState(() => createAudioPlayer(null, { updateInterval: 50 }));
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const checkpoint = useRef<Checkpoint | null>(null);
@@ -173,6 +173,16 @@ export function usePlayback(token: string, userId: string, publicationId: string
     const listener = AppState.addEventListener('change', state => { if (state !== 'active') pause(); });
     return () => listener.remove();
   }, [pause]);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; stop(); }; }, [stop]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      checkpoint.current = null;
+      abort.current?.abort();
+      abort.current = null;
+      narrationPlayer.release();
+      drillPlayer.release();
+    };
+  }, [drillPlayer, narrationPlayer]);
   return { play, pause, resume, canResume, stop, playing, loading, sample, setSample, occurrenceId, repetition, error };
 }

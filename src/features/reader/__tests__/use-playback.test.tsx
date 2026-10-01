@@ -8,7 +8,7 @@ jest.mock('expo-router', () => ({ useFocusEffect: (effect: () => () => void) => 
 jest.mock('react-native', () => ({ AppState: { addEventListener: () => ({ remove: jest.fn() }) } }));
 jest.mock('../asset-cache', () => ({ readerAudio: jest.fn(async (_t, _u, _p, asset) => asset.id) }));
 jest.mock('expo-audio', () => ({
-  useAudioPlayer: () => mockPlayers[mockAudioHookCall++ % 2],
+  createAudioPlayer: () => mockPlayers[mockAudioHookCall++ % 2],
   setAudioModeAsync: jest.fn(async () => undefined),
 }));
 
@@ -20,9 +20,10 @@ let mockSeekDelayMs = 0;
 function makeMockPlayer(channel: string) {
   const listeners = new Set<() => void>();
   let timer: ReturnType<typeof setInterval> | undefined;
+  let released = false;
   const player = {
     currentTime: 0, isLoaded: true, currentStatus: { didJustFinish: false, playbackState: 'readyToPlay' },
-    pause: jest.fn(() => { clearInterval(timer); }),
+    pause: jest.fn(() => { if (released) throw new Error('Player already released'); clearInterval(timer); }),
     replace: jest.fn(() => { player.currentTime = 0; player.isLoaded = true; }),
     seekTo: jest.fn(async (seconds: number) => {
       if (mockSeekDelayMs) setTimeout(() => { player.currentTime = seconds; }, mockSeekDelayMs);
@@ -30,11 +31,13 @@ function makeMockPlayer(channel: string) {
     }),
     addListener: jest.fn((_event: string, listener: () => void) => { listeners.add(listener); return { remove: () => listeners.delete(listener) }; }),
     play: jest.fn(() => {
+      if (released) throw new Error('Player already released');
       mockPlayStartedAt.push({ channel, time: Date.now() });
       clearInterval(timer);
       timer = setInterval(() => { player.currentTime += 0.01; listeners.forEach(listener => listener()); }, 10);
     }),
-    reset: () => { clearInterval(timer); listeners.clear(); player.currentTime = 0; player.isLoaded = true; },
+    release: jest.fn(() => { clearInterval(timer); listeners.clear(); released = true; }),
+    reset: () => { clearInterval(timer); listeners.clear(); released = false; player.currentTime = 0; player.isLoaded = true; },
   };
   return player;
 }
@@ -137,4 +140,12 @@ it('parks the narration, drills on the second player, then resumes forward witho
     { channel: 'narration', time: 8600 },
   ]);
   expect(audio.error).toBeNull();
+});
+
+it('cancels playback before explicitly releasing native players on unmount', async () => {
+  await act(async () => { void audio.play(steps(), 200); });
+  await tick(50);
+  await act(async () => renderer.unmount());
+  expect(mockNarrationPlayer.release).toHaveBeenCalledTimes(1);
+  expect(mockDrillPlayer.release).toHaveBeenCalledTimes(1);
 });
