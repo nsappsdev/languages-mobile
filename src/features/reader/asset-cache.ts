@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { File } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import { API_BASE_URL } from '@/src/config/env';
 import { apiClient } from '@/src/shared/api/client';
@@ -33,29 +34,34 @@ export async function readerAudio(token: string, userId: string, publicationId: 
       if (generation !== epoch) throw new Error('Session changed');
       if (info.exists && !info.isDirectory && info.size === asset.byteLength) return target;
     }
-    const blob = await apiClient.getReaderAudio(token, publicationId, asset.id);
-    if (generation !== epoch) throw new Error('Session changed');
-    if (blob.size !== asset.byteLength || !blob.type.startsWith('audio/')) throw new Error('Audio download is incomplete. Try again.');
     if (Platform.OS === 'web') {
+      const blob = await apiClient.getReaderAudio(token, publicationId, asset.id);
+      if (generation !== epoch) throw new Error('Session changed');
+      if (blob.size !== asset.byteLength || !blob.type.startsWith('audio/')) throw new Error('Audio download is incomplete. Try again.');
       const uri = URL.createObjectURL(blob);
       objectUrls.add(uri);
       return uri;
     }
     if (!root || !target) throw new Error('Audio storage is unavailable on this device');
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result).split(',')[1]);
-      reader.onerror = () => reject(new Error('Unable to read downloaded audio'));
-      reader.readAsDataURL(blob);
-    });
+    const bytes = await apiClient.getReaderAudioBytes(token, publicationId, asset.id);
     if (generation !== epoch) throw new Error('Session changed');
+    if (bytes.byteLength !== asset.byteLength) throw new Error('Audio download is incomplete. Try again.');
     await FileSystem.makeDirectoryAsync(root, { intermediates: true });
     const temporary = `${target}.partial`;
-    await FileSystem.writeAsStringAsync(temporary, base64, { encoding: FileSystem.EncodingType.Base64 });
+    await FileSystem.deleteAsync(temporary, { idempotent: true });
+    const temporaryFile = new File(temporary);
+    temporaryFile.create();
+    temporaryFile.write(bytes);
+    const downloaded = await FileSystem.getInfoAsync(temporary);
+    if (!downloaded.exists || downloaded.isDirectory || downloaded.size !== asset.byteLength) {
+      await FileSystem.deleteAsync(temporary, { idempotent: true });
+      throw new Error('Audio download is incomplete. Try again.');
+    }
     if (generation !== epoch) {
       await FileSystem.deleteAsync(temporary, { idempotent: true });
       throw new Error('Session changed');
     }
+    await FileSystem.deleteAsync(target, { idempotent: true });
     await FileSystem.moveAsync({ from: temporary, to: target });
     return target;
   };

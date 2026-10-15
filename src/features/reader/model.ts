@@ -76,25 +76,32 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
   if (mode.id === 'introduction') return [narration(startSample, text.narration.frameCount)];
   const steps: PlaybackStep[] = [];
   const unknown = text.occurrences.filter(o => o.learning && states[wordKey(text.textReleaseId, o.id)] === 'LEARNING');
+  // Character starts can land inside the first consonant. Keep the aligned
+  // inter-word gap with the upcoming word, rather than playing its onset before
+  // the pause. Use this same source boundary for the drill and narration resume.
+  const wordStarts = new Map(text.occurrences.map((o, index) => [o.id,
+    index === 0 ? 0 : Math.min(o.startSample, text.occurrences[index - 1].endSample),
+  ]));
   const wordCount = Math.max(1, Math.min(20, mode.unknownWordRepetitions ?? 5));
   const appendTeaching = (begin: number, end: number) => {
     let cursor = begin;
     for (const occurrence of unknown) {
       if (occurrence.endSample <= cursor || occurrence.startSample >= end || occurrence.endSample > end) continue;
-      if (cursor < occurrence.startSample) steps.push(narration(cursor, occurrence.startSample));
-      // Keep the narration parked before the word while the secondary player
-      // drills an extracted clip from that same narration. The natural narration
-      // then resumes at the word without any backward seek on the main player.
+      const wordStart = wordStarts.get(occurrence.id)!;
+      const handoff = Math.max(cursor, wordStart);
+      if (cursor < handoff) steps.push(narration(cursor, handoff));
+      // Render from the canonical narration so the lead-in before the published
+      // clip's midpoint cut is included too. Library clips remain unchanged.
       for (let i = 0; i < wordCount; i++) {
-        steps.push({ asset: occurrence.learning!.clip, channel: 'drill',
-          startSample: 0,
-          endSample: occurrence.learning!.clip.frameCount,
-          occurrenceId: occurrence.id, narrationSample: occurrence.startSample,
+        steps.push({ asset: text.narration, channel: 'drill',
+          startSample: wordStart,
+          endSample: occurrence.learning!.cutEndSample,
+          occurrenceId: occurrence.id, narrationSample: handoff,
           repetition: { kind: 'word', label: occurrence.text, index: i + 1, total: wordCount },
           pauseBefore: i === 0,
           pauseAfter: true });
       }
-      cursor = occurrence.startSample;
+      cursor = handoff;
     }
     if (cursor < end) steps.push(narration(cursor, end));
   };
@@ -105,14 +112,17 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
   let cursor = startSample;
   for (const [index, sentence] of text.sentences.entries()) {
     if (sentence.endSample <= cursor) continue;
-    if (sentence.startSample > cursor) appendTeaching(cursor, sentence.startSample);
-    appendTeaching(Math.max(cursor, sentence.startSample), sentence.endSample);
+    // Include the leading gap in this pass. Splitting at sentence.startSample
+    // would let the next sentence's first consonant leak before its word drill.
+    appendTeaching(cursor, sentence.endSample);
     const sentenceUnknown = unknown.filter(o => o.sentenceId === sentence.id);
     if (sentenceUnknown.length >= (mode.repeatSentenceWhenUnknownCountAtLeast ?? 2)) {
       const count = Math.max(1, Math.min(20, mode.sentenceRepetitions ?? 2));
       // After word practice, replay the complete sentence normally, without
       // multiplying its word drills or truncating replays at the resume point.
-      for (let i = 0; i < count; i++) steps.push({ ...narration(sentence.startSample, sentence.endSample), channel: 'drill',
+      const firstWord = text.occurrences.find(o => o.sentenceId === sentence.id);
+      const sentenceStart = firstWord ? wordStarts.get(firstWord.id)! : sentence.startSample;
+      for (let i = 0; i < count; i++) steps.push({ ...narration(sentenceStart, sentence.endSample), channel: 'drill',
         repetition: { kind: 'sentence', label: `Sentence ${index + 1}`, index: i + 1, total: count } });
     }
     cursor = sentence.endSample;

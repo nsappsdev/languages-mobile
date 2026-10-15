@@ -19,7 +19,7 @@ export class ApiError extends Error {
 
 type RequestOptions = RequestInit & {
   token?: string | null;
-  responseType?: 'blob';
+  responseType?: 'blob' | 'bytes';
 };
 
 export const API_REQUEST_TIMEOUT_MS = 20_000;
@@ -72,11 +72,14 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
     let response: Response;
     try {
-      response = await fetch(`${API_BASE_URL}${path}`, {
-        ...init,
-        headers,
-        signal: controller.signal,
-      });
+      const url = `${API_BASE_URL}${path}`;
+      const requestInit = { ...init, headers, signal: controller.signal };
+      if (responseType === 'bytes') {
+        const { fetch: expoFetch } = await import('expo/fetch');
+        response = await expoFetch(url, requestInit);
+      } else {
+        response = await fetch(url, requestInit);
+      }
     } catch {
       if (timedOut) {
         throw new ApiError('Request timed out. Check your connection and try again.', 0, 'TIMEOUT');
@@ -91,6 +94,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
 
     if (response.ok && responseType === 'blob') return await response.blob() as T;
+    if (response.ok && responseType === 'bytes') {
+      return await (response as Response & { bytes(): Promise<Uint8Array> }).bytes() as T;
+    }
     const text = await response.text();
     const payload = text ? tryParseJson(text) : null;
 
@@ -236,6 +242,11 @@ export const apiClient = {
   getReaderAudio(token: string, publicationId: string, assetId: string) {
     return request<Blob>(`/learner/audio-assets/${encodeURIComponent(assetId)}/content?publicationId=${encodeURIComponent(publicationId)}`, {
       token, responseType: 'blob', cache: 'no-store',
+    });
+  },
+  getReaderAudioBytes(token: string, publicationId: string, assetId: string) {
+    return request<Uint8Array>(`/learner/audio-assets/${encodeURIComponent(assetId)}/content?publicationId=${encodeURIComponent(publicationId)}`, {
+      token, responseType: 'bytes', cache: 'no-store',
     });
   },
   getSettings(token: string) {
