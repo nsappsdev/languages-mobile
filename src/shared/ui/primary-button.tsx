@@ -1,5 +1,7 @@
+import { Ionicons } from '@expo/vector-icons';
+import type { ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text } from 'react-native';
-import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import { border, brand, controlSize, motion, radii, spacing, surface, text, typography } from '@/src/shared/theme';
 
 interface PrimaryButtonProps {
   title: string;
@@ -8,6 +10,7 @@ interface PrimaryButtonProps {
   loading?: boolean;
   variant?: 'primary' | 'secondary' | 'danger' | 'quiet';
   accessibilityLabel?: string;
+  icon?: ComponentProps<typeof Ionicons>['name'];
 }
 
 export function PrimaryButton({
@@ -17,8 +20,10 @@ export function PrimaryButton({
   loading = false,
   variant = 'primary',
   accessibilityLabel,
+  icon,
 }: PrimaryButtonProps) {
   const isSecondary = variant === 'secondary' || variant === 'quiet';
+  const foreground = variant === 'danger' ? text.error : isSecondary ? text.brand : text.inverse;
   return (
     <Pressable
       accessibilityLabel={accessibilityLabel ?? title}
@@ -35,9 +40,12 @@ export function PrimaryButton({
         pressed && !disabled && !loading && styles.buttonPressed,
       ]}>
       {loading ? (
-        <ActivityIndicator color={isSecondary ? brand[700] : neutral[0]} />
+        <ActivityIndicator color={foreground} />
       ) : (
-        <Text style={[styles.text, isSecondary && styles.textSecondary]}>{title}</Text>
+        <>
+          {icon ? <Ionicons name={icon} size={19} color={foreground} accessible={false} importantForAccessibility="no-hide-descendants" /> : null}
+          {title ? <Text style={[styles.text, { color: foreground }]}>{title}</Text> : null}
+        </>
       )}
     </Pressable>
   );
@@ -49,12 +57,16 @@ const styles = StyleSheet.create({
     backgroundColor: brand[700],
     borderRadius: radii.lg,
     justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 16,
+    flexDirection: 'row',
+    gap: spacing[2],
+    minHeight: controlSize.standard,
+    minWidth: controlSize.standard,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
   },
   buttonSecondary: {
-    backgroundColor: surface.active,
-    borderColor: border.active,
+    backgroundColor: surface.card,
+    borderColor: border.strong,
     borderWidth: 1,
   },
   buttonQuiet: {
@@ -62,20 +74,19 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   buttonDanger: {
-    backgroundColor: text.error,
+    backgroundColor: surface.card,
+    borderColor: border.default,
+    borderWidth: 1,
   },
   buttonDisabled: {
-    backgroundColor: neutral[400],
+    opacity: motion.disabledOpacity,
   },
   buttonPressed: {
-    opacity: 0.86,
+    opacity: motion.pressedOpacity,
   },
   text: {
-    color: text.inverse,
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.semibold,
-  },
-  textSecondary: {
-    color: text.brand,
+    ...typography.label,
+    textAlign: 'center',
+    flexShrink: 1,
   },
 });

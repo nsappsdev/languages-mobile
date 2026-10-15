@@ -38,13 +38,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
+    paddingHorizontal: layout.phoneGutter,
+    paddingTop: spacing[6],
   },
   scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: spacing[4],
-    paddingTop: spacing[4],
+    paddingHorizontal: layout.phoneGutter,
+    paddingTop: spacing[6],
   },
   inner: {
     alignSelf: 'center',

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSession } from '@/src/shared/auth/session-context';
 import { useFooterLayout } from '@/src/shared/ui/footer-inset-context';
-import { border, brand, fontSize, fontWeight, neutral, radii, surface, text } from '@/src/shared/theme';
+import { border, brand, fontSize, fontWeight, layout, motion, radii, spacing, surface, text } from '@/src/shared/theme';
 
 const FOOTER_ITEMS: {
   key: string;
@@ -75,8 +75,9 @@ export function GlobalFooter() {
               ]}>
               <Ionicons
                 name={isActive ? item.activeIcon : item.icon}
-                size={20}
-                color={isActive ? brand[700] : neutral[500]}
+                size={22}
+                color={isActive ? brand[700] : text.secondary}
+                accessible={false}
               />
               <Text style={[styles.label, isActive && styles.labelActive]}>{item.label}</Text>
             </Pressable>
@@ -89,41 +90,42 @@ export function GlobalFooter() {
 
 const styles = StyleSheet.create({
   wrapper: {
-    backgroundColor: 'transparent',
+    backgroundColor: surface.card,
+    borderTopColor: border.default,
+    borderTopWidth: 1,
     bottom: 0,
     left: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: spacing[5],
     position: 'absolute',
     right: 0,
   },
   footer: {
-    backgroundColor: surface.overlay,
-    borderColor: border.subtle,
-    borderRadius: radii['3xl'],
-    borderWidth: 1,
+    alignSelf: 'center',
+    maxWidth: layout.tabletMaxWidth,
+    width: '100%',
     flexDirection: 'row',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    boxShadow: '0px 4px 12px rgba(23, 33, 31, 0.05)',
+    paddingTop: spacing[2],
+    gap: spacing[2],
   },
   item: {
     alignItems: 'center',
-    borderRadius: radii.xl,
+    borderRadius: radii.lg,
     flex: 1,
     gap: 4,
     paddingHorizontal: 8,
-    paddingVertical: 10,
+    paddingVertical: spacing[2],
+    minHeight: 56,
   },
   itemActive: {
     backgroundColor: surface.active,
   },
   itemPressed: {
-    opacity: 0.86,
+    opacity: motion.pressedOpacity,
   },
   label: {
-    color: text.muted,
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.bold,
+    color: text.secondary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   labelActive: {
     color: text.brand,

@@ -22,10 +22,10 @@ export function AuthShell({
         style={styles.keyboardView}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <Text style={styles.eyebrow}>{eyebrow}</Text>
             <Text accessibilityRole="header" style={styles.title}>
               {title}
             </Text>
+            <Text style={styles.eyebrow}>{eyebrow}</Text>
             <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
           {children}
@@ -45,14 +45,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   header: {
-    gap: spacing[2],
+    gap: spacing[3],
     marginBottom: spacing[8],
   },
   eyebrow: {
     color: text.brand,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    ...typography.caption,
+    ...typography.label,
   },
   title: {
     color: text.primary,

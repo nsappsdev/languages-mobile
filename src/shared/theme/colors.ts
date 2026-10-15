@@ -1,4 +1,4 @@
-/** Calm Editorial foundation. Numeric aliases remain for incremental screen migration. */
+/** Light reading surfaces with one teal accent and semantic status colors. */
 export const brand = {
   50: '#f1fcf8',
   100: '#ddf2ea',
@@ -15,7 +15,7 @@ export const brand = {
 export const neutral = {
   0: '#ffffff',
   50: '#f7f4ed',
-  100: '#f1fcf8',
+  100: '#f0f2ee',
   200: '#e5e1d8',
   300: '#bdc9c6',
   400: '#8a9692',
@@ -29,7 +29,7 @@ export const neutral = {
 export const palette = {
   canvas: '#f7f4ed',
   surface: '#ffffff',
-  surfaceSubtle: '#f1fcf8',
+  surfaceSubtle: '#f0f2ee',
   surfaceMint: '#ddf2ea',
   primary: '#0f766e',
   primaryStrong: '#005c55',
@@ -55,7 +55,7 @@ export const text = {
   primary: palette.ink,
   secondary: palette.inkMuted,
   muted: '#6e7977',
-  placeholder: '#8a9692',
+  placeholder: '#64716b',
   inverse: palette.surface,
   brand: palette.primary,
   error: palette.danger,

@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: surface.card,
     borderColor: border.default,
-    borderRadius: radii['2xl'],
+    borderRadius: radii.xl,
     borderWidth: 1,
     padding: spacing[4],
   },

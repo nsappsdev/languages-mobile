@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
-import { palette } from '@/src/shared/theme';
+import { controlSize, layout, motion, palette, radii, spacing, typography } from '@/src/shared/theme';
 import { ScreenContainer } from '@/src/shared/ui/screen-container';
 import { meaning, wordKey } from './model';
 import { pendingReaderChanges } from './state-store';
@@ -80,7 +80,7 @@ export function WordsScreen() {
   };
 
   return (
-    <ScreenContainer scroll maxWidth={760}>
+    <ScreenContainer scroll maxWidth={layout.tabletMaxWidth}>
       <View style={styles.screen}>
         <ResourceState {...resource}>
           {selectedReleaseId && selectedText ? (
@@ -120,7 +120,7 @@ export function WordsScreen() {
                         style={({ pressed }) => [styles.wordSide, pressed && styles.pressed]}>
                         <View style={styles.englishLine}>
                           <Text style={[styles.englishWord, isPlaying && styles.playingWord]}>{word.occurrence.text}</Text>
-                          {isPlaying ? <Ionicons name="volume-high" size={17} color={palette.primary} /> : null}
+                          <Ionicons name={isPlaying ? 'volume-high' : 'volume-medium-outline'} size={18} color={isPlaying ? palette.primary : palette.inkMuted} accessible={false} />
                         </View>
                       </Pressable>
 
@@ -152,7 +152,6 @@ export function WordsScreen() {
           ) : (
             <>
               <View style={styles.libraryHeader}>
-                <Text style={ui.eyebrow}>LIBRARY</Text>
                 <Text accessibilityRole="header" style={ui.title}>Your texts</Text>
               </View>
               <SyncNotice />
@@ -170,8 +169,11 @@ export function WordsScreen() {
                       accessibilityRole="button"
                       onPress={() => openText(text.textReleaseId)}
                       style={({ pressed }) => [styles.textCard, pressed && styles.textCardPressed]}>
-                      <Text style={styles.textTitle}>{text.title}</Text>
-                      <Ionicons name="chevron-forward" size={21} color={palette.inkMuted} />
+                      <View style={styles.textInfo}>
+                        <Text style={styles.textTitle}>{text.title}</Text>
+                        <Text style={styles.wordCount}>{text.words.length} {text.words.length === 1 ? 'word' : 'words'}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color={palette.primary} accessible={false} />
                     </Pressable>
                   ))}
                 </View>
@@ -186,28 +188,28 @@ export function WordsScreen() {
 
 const styles = StyleSheet.create({
   screen: {
-    gap: 18,
-    paddingTop: 18,
+    gap: spacing[6],
+    paddingTop: spacing[3],
   },
   libraryHeader: {
-    gap: 5,
-    paddingBottom: 4,
+    gap: spacing[2],
+    paddingBottom: spacing[1],
   },
   textList: {
-    gap: 10,
+    gap: spacing[3],
   },
   textCard: {
     alignItems: 'center',
     backgroundColor: palette.surface,
     borderColor: palette.border,
-    borderRadius: 18,
+    borderRadius: radii.xl,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 14,
+    gap: spacing[4],
     justifyContent: 'space-between',
     minHeight: 72,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[5],
   },
   textCardPressed: {
     backgroundColor: palette.surfaceSubtle,
@@ -215,18 +217,17 @@ const styles = StyleSheet.create({
   },
   textTitle: {
     color: palette.ink,
-    flex: 1,
-    fontSize: 19,
-    fontWeight: '600',
-    lineHeight: 27,
+    ...typography.cardTitle,
   },
+  textInfo: { flex: 1, gap: spacing[2] },
+  wordCount: { color: palette.inkMuted, ...typography.caption },
   backButton: {
     alignItems: 'center',
     alignSelf: 'flex-start',
     flexDirection: 'row',
-    gap: 7,
-    minHeight: 44,
-    paddingRight: 12,
+    gap: spacing[2],
+    minHeight: controlSize.standard,
+    paddingRight: spacing[3],
   },
   backLabel: {
     color: palette.primaryStrong,
@@ -234,22 +235,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   pressed: {
-    opacity: 0.68,
+    opacity: motion.pressedOpacity,
   },
   detailHeader: {
-    gap: 8,
+    gap: spacing[2],
   },
   detailTitle: {
     color: palette.ink,
-    fontSize: 29,
-    fontWeight: '700',
-    letterSpacing: -0.6,
-    lineHeight: 37,
+    ...typography.screenTitle,
   },
   wordList: {
     backgroundColor: palette.surface,
     borderColor: palette.border,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -266,19 +264,20 @@ const styles = StyleSheet.create({
   wordSide: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[4],
   },
   englishLine: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: spacing[2],
   },
   englishWord: {
     color: palette.ink,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     lineHeight: 28,
+    flexShrink: 1,
   },
   playingWord: {
     color: palette.primary,
@@ -289,8 +288,8 @@ const styles = StyleSheet.create({
     borderLeftWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[4],
   },
   translation: {
     color: palette.primaryStrong,
@@ -308,21 +307,21 @@ const styles = StyleSheet.create({
   emptyCard: {
     backgroundColor: palette.surface,
     borderColor: palette.border,
-    borderRadius: 20,
+    borderRadius: radii.xl,
     borderWidth: 1,
-    gap: 8,
-    padding: 22,
+    gap: spacing[2],
+    padding: spacing[5],
   },
   emptyTitle: {
     color: palette.ink,
-    fontSize: 20,
-    fontWeight: '600',
-    lineHeight: 28,
+    ...typography.cardTitle,
   },
   returnButton: {
     alignSelf: 'flex-start',
-    marginTop: 6,
-    paddingVertical: 8,
+    marginTop: spacing[2],
+    minHeight: controlSize.standard,
+    justifyContent: 'center',
+    paddingVertical: spacing[2],
   },
   returnLabel: {
     color: palette.primaryStrong,
