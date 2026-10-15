@@ -30,9 +30,9 @@ describe('immutable occurrence-based reading', () => {
   });
   it('practices only the chosen occurrence, not every identical spelling', () => {
     const steps = buildPlayback(fixture, DEFAULT_MODES[1], { 'release-a:cat2': 'LEARNING' });
-    expect(steps.filter(s => s.occurrenceId).map(s => s.asset.id)).toEqual(Array(5).fill('clip2'));
-    expect(steps.filter(s => s.channel === 'narration').map(s => [s.startSample, s.endSample])).toEqual([[0, 700], [700, 1000]]);
-    expect(steps.filter(s => s.occurrenceId).map(s => [s.startSample, s.endSample])).toEqual(Array(5).fill([0, 350]));
+    expect(steps.filter(s => s.occurrenceId).map(s => s.asset.id)).toEqual(Array(5).fill('audio-a'));
+    expect(steps.filter(s => s.channel === 'narration').map(s => [s.startSample, s.endSample])).toEqual([[0, 600], [600, 1000]]);
+    expect(steps.filter(s => s.occurrenceId).map(s => [s.startSample, s.endSample])).toEqual(Array(5).fill([600, 1000]));
   });
   it('never includes unselected or learned occurrences in practice', () => {
     const steps = buildPlayback(fixture, DEFAULT_MODES[1], { 'release-a:a1': 'LEARNING', 'release-a:cat1': 'LEARNED' });
@@ -52,10 +52,10 @@ describe('immutable occurrence-based reading', () => {
     const steps = buildPlayback(fixture, { ...DEFAULT_MODES[1], unknownWordRepetitions: count }, { 'release-a:cat1': 'LEARNING' });
     const drills = steps.filter(s => s.occurrenceId === 'cat1');
     expect(drills).toHaveLength(count);
-    expect(drills.every(s => s.channel === 'drill' && s.asset.id === 'clip1')).toBe(true);
+    expect(drills.every(s => s.channel === 'drill' && s.asset.id === fixture.narration.id && s.startSample === 100 && s.endSample === 450)).toBe(true);
     expect(drills.filter(s => s.pauseBefore)).toHaveLength(1);
     expect(drills.every(s => s.pauseAfter)).toBe(true);
-    expect(steps.filter(s => s.channel === 'narration').map(s => [s.startSample, s.endSample])).toEqual([[0, 200], [200, 1000]]);
+    expect(steps.filter(s => s.channel === 'narration').map(s => [s.startSample, s.endSample])).toEqual([[0, 100], [100, 1000]]);
   });
   it('does not repeat a deep-learning sentence below the threshold', () => {
     const steps = buildPlayback(fixture, DEFAULT_MODES[2], { 'release-a:cat1': 'LEARNING' });
@@ -74,7 +74,36 @@ describe('immutable occurrence-based reading', () => {
     const replays = steps.filter(s => s.repetition?.kind === 'sentence');
     expect(replays).toHaveLength(2);
     expect(replays.every(step => step.channel === 'drill')).toBe(true);
-    expect(steps.indexOf(replays[1])).toBeLessThan(steps.findIndex(s => s.startSample === 1100));
-    expect(steps.filter(s => s.startSample === 900 && s.endSample === 1100)).toHaveLength(1);
+    expect(steps[steps.indexOf(replays[1]) + 1]).toMatchObject({ channel: 'narration', startSample: 900, endSample: 1900 });
+  });
+  it.each([1, 2])('keeps every original narration sample exactly once in mode %i', modeIndex => {
+    const steps = buildPlayback(fixture, DEFAULT_MODES[modeIndex], { 'release-a:cat1': 'LEARNING', 'release-a:cat2': 'LEARNING' });
+    const narration = steps.filter(s => s.channel === 'narration');
+    expect(narration[0].startSample).toBe(0);
+    expect(narration[narration.length - 1].endSample).toBe(fixture.narration.frameCount);
+    for (let i = 1; i < narration.length; i++) expect(narration[i].startSample).toBe(narration[i - 1].endSample);
+  });
+  it('does not play the first consonant of a new sentence before its drill in deep learning', () => {
+    const text = { ...fixture, sentences: [
+      { ...fixture.sentences[0], charEnd: 8, endSample: 600 },
+      { id: 's2', text: 'cat!', charStart: 9, charEnd: 13, startSample: 700, endSample: 900 },
+    ], occurrences: fixture.occurrences.map(o => o.id === 'cat2' ? { ...o, sentenceId: 's2' } : o) };
+    const steps = buildPlayback(text, { ...DEFAULT_MODES[2], repeatSentenceWhenUnknownCountAtLeast: 1 }, { 'release-a:cat2': 'LEARNING' });
+    const firstDrill = steps.findIndex(s => s.occurrenceId === 'cat2');
+    expect(steps.slice(0, firstDrill).map(s => [s.startSample, s.endSample])).toEqual([[0, 600]]);
+    expect(steps[firstDrill]).toMatchObject({ startSample: 600, narrationSample: 600 });
+    expect(steps.filter(s => s.repetition?.kind === 'sentence').every(s => s.startSample === 600)).toBe(true);
+  });
+  it('preserves the opening consonant when the first word in the text is selected', () => {
+    const text = { ...fixture, occurrences: fixture.occurrences.map((o, i) => i ? o : {
+      ...o, startSample: 30, learning: { ...fixture.occurrences[1].learning!, cutStartSample: 0, cutEndSample: 150 },
+    }) };
+    const steps = buildPlayback(text, DEFAULT_MODES[1], { 'release-a:a1': 'LEARNING' });
+    expect(steps[0]).toMatchObject({ channel: 'drill', occurrenceId: 'a1', startSample: 0 });
+  });
+  it('does not move narration backward when starting inside a word lead-in', () => {
+    const steps = buildPlayback(fixture, DEFAULT_MODES[1], { 'release-a:cat1': 'LEARNING' }, 175);
+    expect(steps[0]).toMatchObject({ channel: 'drill', startSample: 100, narrationSample: 175 });
+    expect(steps.filter(s => s.channel === 'narration')[0].startSample).toBe(175);
   });
 });
