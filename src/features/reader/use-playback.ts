@@ -12,7 +12,7 @@ type Checkpoint = {
 };
 
 export function usePlayback(token: string, userId: string, publicationId: string) {
-  const [player] = useState(() => createAudioPlayer(null, { updateInterval: 50 }));
+  const playerRef = useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   const abort = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const checkpoint = useRef<Checkpoint | null>(null);
@@ -28,28 +28,33 @@ export function usePlayback(token: string, userId: string, publicationId: string
 
   const capture = useCallback(() => {
     const saved = checkpoint.current;
-    if (!saved?.track || loadedUri.current !== saved.track.uri || !player.isLoaded) return;
+    const player = playerRef.current;
+    if (!player || !saved?.track || loadedUri.current !== saved.track.uri || !player.isLoaded) return;
     saved.position = Math.max(0, Math.min(saved.track.frameCount, Math.round(player.currentTime * saved.track.sampleRate)));
     if (mounted.current) {
       const current = trackPosition(saved.track, saved.position);
       setSample(current.sample); setOccurrenceId(current.occurrenceId); setRepetition(current.repetition);
     }
-  }, [player]);
+  }, []);
   const pause = useCallback(() => {
     if (advancing.current) capture();
     advancing.current = false;
     abort.current?.abort();
     abort.current = null;
-    player.pause();
+    playerRef.current?.pause();
     if (mounted.current) { setPlaying(false); setLoading(false); setOccurrenceId(null); setCanResume(!!checkpoint.current); }
-  }, [capture, player]);
+  }, [capture]);
   const dispose = useCallback(() => {
     const previous = checkpoint.current;
     checkpoint.current = null;
     loadedUri.current = null;
-    player.replace(null);
+    // Android rejects replace(null). Release the player before deleting its
+    // source, then create a fresh player when another track is ready to load.
+    const player = playerRef.current;
+    playerRef.current = null;
+    player?.release();
     previous?.track?.dispose();
-  }, [player]);
+  }, []);
   const stop = useCallback(() => {
     pause(); dispose();
     if (mounted.current) { setRepetition(undefined); setCanResume(false); }
@@ -73,6 +78,8 @@ export function usePlayback(token: string, userId: string, publicationId: string
       }
       check();
       const track = saved.track;
+      const player = playerRef.current ?? createAudioPlayer(null, { updateInterval: 50 });
+      playerRef.current = player;
       if (loadedUri.current !== track.uri || !player.isLoaded) {
         await new Promise<void>((resolve, reject) => {
           let finished = false;
@@ -89,8 +96,12 @@ export function usePlayback(token: string, userId: string, publicationId: string
           });
           signal.addEventListener('abort', onAbort, { once: true });
           timeout = setTimeout(() => done(new Error('Audio took too long to load. Try again.')), 15000);
-          player.replace({ uri: track.uri });
-          if (player.isLoaded) done();
+          try {
+            player.replace({ uri: track.uri });
+            if (player.isLoaded) done();
+          } catch (failure) {
+            done(failure instanceof Error ? failure : new Error('Audio could not be loaded'));
+          }
         });
       }
       check();
@@ -153,10 +164,11 @@ export function usePlayback(token: string, userId: string, publicationId: string
         setCanResume(!!checkpoint.current); if (!checkpoint.current) setRepetition(undefined);
       }
     }
-  }, [capture, dispose, pause, player, token, userId]);
+  }, [capture, dispose, pause, token, userId]);
   const play = useCallback((steps: PlaybackStep[], pauseMs = 0, activePublication = publicationId) => {
     stop();
     if (!steps.length) return Promise.resolve();
+    setSample(steps[0].narrationSample);
     return run({ steps, position: 0, pauseMs, publicationId: activePublication });
   }, [publicationId, run, stop]);
   const resume = useCallback(() => checkpoint.current ? run(checkpoint.current) : Promise.resolve(), [run]);
@@ -170,12 +182,9 @@ export function usePlayback(token: string, userId: string, publicationId: string
     mounted.current = true;
     return () => {
       mounted.current = false;
-      abort.current?.abort(); abort.current = null;
       // Cancel listeners before releasing the native player or its local file.
-      player.pause();
-      player.release();
-      checkpoint.current?.track?.dispose(); checkpoint.current = null;
+      stop();
     };
-  }, [player]);
+  }, [stop]);
   return { play, pause, resume, canResume, stop, playing, loading, sample, setSample, occurrenceId, repetition, error };
 }

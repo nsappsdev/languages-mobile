@@ -41,17 +41,20 @@ it('keeps an uninterrupted narration byte-for-byte, including natural silence', 
   expect(trackPosition(track, 2400).sample).toBe(2400);
 });
 
-it.each([1, 2])('keeps an early consonant out of pre-drill narration and in every word play in mode %i', modeIndex => {
+it.each([1, 2])('reads the complete word before pausing, repeats it, then continues forward in mode %i', modeIndex => {
   const samples = new Int16Array(RATE);
   samples.fill(1000, 0, 6000); // preceding word ends at the provider's boundary
   samples.fill(8000, 6600, 8300); // consonant starts before both midpoint and character timestamp
   samples.fill(2000, 8300, 14000);
+  samples.fill(3000, 14000, 14500); // spoken tail extends beyond the character end
+  samples.fill(6000, 16000, 18500); // next word starts early too; keep it after practice
   const narration = { ...fixture.narration, sampleRate: RATE, frameCount: samples.length, byteLength: samples.byteLength + 44 };
-  const text = { ...fixture, narration, sentences: [{ ...fixture.sentences[0], startSample: 0, endSample: 14000 }], occurrences: [
+  const text = { ...fixture, narration, sentences: [{ ...fixture.sentences[0], startSample: 0, endSample: 18500 }], occurrences: [
     { ...fixture.occurrences[0], startSample: 0, endSample: 6000 },
     { ...fixture.occurrences[1], startSample: 8400, endSample: 14000,
       learning: { ...fixture.occurrences[1].learning!, cutStartSample: 7200, cutEndSample: 15000,
         clip: { ...fixture.occurrences[1].learning!.clip, sampleRate: RATE, frameCount: 7800 } } },
+    { ...fixture.occurrences[2], startSample: 16500, endSample: 18500 },
   ] };
   const audio = { bytes: new Uint8Array(samples.buffer), sampleRate: RATE, frameCount: samples.length };
   const plan = buildPlayback(text, { ...DEFAULT_MODES[modeIndex], unknownWordRepetitions: 2 }, { 'release-a:cat1': 'LEARNING' });
@@ -64,12 +67,17 @@ it.each([1, 2])('keeps an early consonant out of pre-drill narration and in ever
     for (let i = start; i < end; i++) if (rendered.getInt16(i * 2, true) === 8000) count++;
     return count;
   };
-  expect(consonantFrames(spans[0].start, spans[0].end)).toBe(0);
+  expect(spans[0].step).toMatchObject({ channel: 'narration', startSample: 0, endSample: 15000 });
+  expect(consonantFrames(spans[0].start, spans[0].end)).toBe(1700);
+  const tail = spans[0].start + 14200;
+  expect(rendered.getInt16(tail * 2, true)).toBe(3000);
   const drills = spans.filter(s => s.step.repetition?.kind === 'word');
   expect(drills).toHaveLength(2);
   for (const span of drills) expect(consonantFrames(span.start, span.end)).toBe(1700);
   const resumed = spans[spans.indexOf(drills[1]) + 1];
-  expect(consonantFrames(resumed.start, resumed.end)).toBe(1700);
+  expect(resumed.step).toMatchObject({ channel: 'narration', startSample: 15000 });
+  expect(consonantFrames(resumed.start, resumed.end)).toBe(0);
+  expect(trackPosition(track, drills[0].start + 100)).toMatchObject({ sample: 15000, occurrenceId: 'cat1' });
   const voicedEdge = (span: typeof spans[number], first: boolean) => {
     let frame = first ? span.start : span.end;
     while (first ? frame < span.end : frame > span.start) {
@@ -78,8 +86,12 @@ it.each([1, 2])('keeps an early consonant out of pre-drill narration and in ever
     }
     return frame;
   };
-  const gapMs = (voicedEdge(drills[1], true) - voicedEdge(drills[0], false)) / RATE * 1000;
-  expect(gapMs).toBeCloseTo(400, 1);
+  const sequence = [spans[0], ...drills, resumed];
+  for (let i = 1; i < sequence.length; i++) {
+    const gapMs = (voicedEdge(sequence[i], true) - voicedEdge(sequence[i - 1], false)) / RATE * 1000;
+    // Tiny de-click ramps shift the measured amplitude threshold by a few samples.
+    expect(Math.abs(gapMs - 400)).toBeLessThan(0.4);
+  }
 });
 
 it('preserves very quiet spoken clips instead of treating them as silence', () => {

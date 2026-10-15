@@ -20,7 +20,7 @@ The backend needs the reader publication and text-authoring migrations. In admin
 - Lessons list only explicitly published manifests; `/runner/[lessonId]` is the single reader.
 - Sentences retain punctuation and use real narration sample boundaries. Selected occurrences open contextual meanings and clips cut from that narration.
 - Listen plays the narration; Practice repeats occurrences marked for practice; Deep learning repeats sentences according to saved settings. There are no provider requests from mobile.
-- Word repetition counts mean isolated practice plays before the word is heard naturally in context. The configured pause applies before the drill, between every practice play, and before narration resumes at the word. Deep learning runs that word drill once, then the configured full-sentence replays. A visible counter shows the active play/replay; pausing retains the exact track position.
+- Words are heard naturally in context first, followed by the configured number of extra practice plays. The configured pause applies after that natural occurrence, between every practice play, and before narration continues after the word. Deep learning runs that word drill once, then the configured full-sentence replays. A visible counter shows the active play/replay; pausing retains the exact track position.
 - Words use text release and occurrence IDs, so equal spellings remain independent. Saved states are New, Learning, and Learned.
 - One playback controller owns a player for the prepared continuous track and cancels playback on mode changes, navigation, and backgrounding.
 - Asset downloads are authenticated. Cache identity includes API environment, user, publication, asset ID, and server content hash. Downloads check size and MIME type; native writes use a temporary file before promotion. Logout clears private audio caches. The client does not independently compute file hashes.
@@ -47,20 +47,22 @@ Existing `build:android:production`, `build:ios:production`, and EAS submit scri
 
 ## Smooth repetition playback
 
-Practice and Deep learning keep the existing word selection, repetition counts,
-sequence order, and sentence-repeat rules. Playback now prepares one continuous
+Practice and Deep learning read each selected word in context before its extra
+repetitions, then continue after that word. Word selection, repetition counts and
+sentence-repeat rules stay the same. Playback prepares one continuous
 PCM WAV locally from the authenticated publication assets. It plays once rather
 than stopping, seeking and starting a player for every word. The source narration,
 clips, immutable publications and persisted learning states remain unchanged.
 
-Word practice stops the preceding narration at the previous occurrence's aligned
-speech end, keeping the inter-word gap and early consonants with the next word.
-Both the repeat and resumed narration use that same source boundary. Repeats are
-rendered from the canonical narration through the published clip's end, preserving
-speech before the clip's midpoint cut. This prevents a partial initial consonant
-from playing before the pause and avoids truncating it on resume. Deep learning
-also keeps the leading gap with a sentence's first word. Character timestamps
-remain unchanged for highlighting; Library audio clips remain unchanged.
+Word practice pauses at the selected word's published clip end, keeping speech
+tails that extend beyond its character timestamp. Repeats use the
+canonical narration from the previous occurrence's end through the published
+clip's end, preserving the full onset even when character timestamps begin late.
+After the repeats, narration resumes at that same clip boundary, retaining the
+following word's lead-in without reading the selected word in context again.
+Deep learning includes that trailing word margin in its sentence replays and
+keeps the leading gap with a sentence's first word. Character
+timestamps remain unchanged for highlighting; Library audio clips remain unchanged.
 
 Admin **Settings → Word repetition timing** controls `wordRepetitionPauseMs`
 (0–3000 ms). The 400 ms preset matches the approximate rhythm of the supplied
@@ -79,6 +81,10 @@ Sample spans map the prepared track back to the original narration for progress,
 highlighting and repetition counters. Pause/resume retains the exact track
 position, including remaining silence. Native output uses bounded file writes;
 web uses Blob parts. Tracks are released on completion, replacement and unmount.
+While playback is active, tapping any word jumps backward or forward to its
+sentence's published start and continues in the selected reading mode. This also
+works during repetitions and loading; the latest tap cancels any previous jump.
+While paused, word taps retain vocabulary selection and translation feedback.
 Native files live inside the private cache cleared on logout. Preparation rejects
 tracks larger than 128 MiB (about 46 minutes at mono 24 kHz) with an actionable
 message rather than allocating an unbounded audio buffer.

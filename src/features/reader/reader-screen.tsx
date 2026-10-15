@@ -8,7 +8,7 @@ import { palette } from '@/src/shared/theme';
 import type { AppSettings, ReadingModeSettings } from '@/src/types/domain';
 import { useResource } from './use-resource';
 import { usePlayback } from './use-playback';
-import { activeOccurrence, buildPlayback, DEFAULT_MODES, meaning, nextUnknownStatus, textTokens, timeLabel, wordKey } from './model';
+import { activeOccurrence, buildPlayback, DEFAULT_MODES, meaning, nextUnknownStatus, sentenceStartSample, textTokens, timeLabel, wordKey } from './model';
 import { fitTranslationLabel } from './translation-fit';
 import { flushReaderChanges, pendingReaderChanges, readerTimestamp, saveReaderChange } from './state-store';
 import type { ReaderOccurrence, ReaderResponse, WordStatus } from './types';
@@ -102,15 +102,16 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
     <ScrollView contentContainerStyle={styles.readingScroll}>
       <View style={styles.page}>
         <View style={ui.spread}><Text style={ui.eyebrow}>READ & LISTEN</Text><Text style={ui.subtitle}>{timeLabel(text.narration.frameCount / text.narration.sampleRate)}</Text></View>
-        <Text style={ui.subtitle}>Tap a word you do not know. Its translation will stay above it while you listen and practice.</Text>
+        <Text style={ui.subtitle}>While listening, tap any word to jump to the start of its sentence. Pause to mark words you do not know and see their translations.</Text>
         <View style={styles.passageFlow}>
           {tokenized.prefix ? <Text style={[styles.passage, passageType(settings)]}>{tokenized.prefix}</Text> : null}
           {tokenized.tokens.map(token => <ReaderWordToken key={token.occurrence.id} {...token}
             status={states[wordKey(text.textReleaseId, token.occurrence.id)]}
             active={token.occurrence.id === activeId && audio.playing}
-            disabled={audio.playing || audio.loading}
+            disabled={finishing}
             pulseKey={audio.repetition?.kind === 'word' && audio.occurrenceId === token.occurrence.id ? `${audio.repetition.index}:${audio.repetition.total}` : null}
-            settings={settings} onToggle={() => toggleUnknown(token.occurrence)} />)}
+            settings={settings} onToggle={() => toggleUnknown(token.occurrence)}
+            onSeek={audio.playing || audio.loading ? () => start(sentenceStartSample(text, token.occurrence)) : undefined} />)}
         </View>
         <SyncNotice />
       </View>
@@ -143,7 +144,7 @@ function passageType(settings: AppSettings) {
   };
 }
 
-function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, pulseKey, settings, onToggle }: {
+function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, pulseKey, settings, onToggle, onSeek }: {
   occurrence: ReaderOccurrence;
   word: string;
   suffix: string;
@@ -153,6 +154,7 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
   pulseKey: string | null;
   settings: AppSettings;
   onToggle: () => void;
+  onSeek?: () => void;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const missingProgress = useRef(new Animated.Value(0)).current;
@@ -237,10 +239,10 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
   </View>;
 
   return <Pressable testID={`reader-word-${occurrence.id}`} accessibilityRole="button"
-    accessibilityLabel={availableTranslation ? `${word}, ${unknown ? 'marked unknown' : 'mark as unknown'}` : `${word}, check translation`}
-    accessibilityHint={disabled ? 'Pause playback to change this word' : undefined}
+    accessibilityLabel={onSeek ? `${word}, jump to sentence` : availableTranslation ? `${word}, ${unknown ? 'marked unknown' : 'mark as unknown'}` : `${word}, check translation`}
+    accessibilityHint={onSeek ? 'Plays from the start of this sentence in the current reading mode' : undefined}
     accessibilityState={{ disabled, selected: unknown }} disabled={disabled}
-    onPress={availableTranslation ? onToggle : showMissingTranslation}>
+    onPress={onSeek ?? (availableTranslation ? onToggle : showMissingTranslation)}>
     {contents}
   </Pressable>;
 }

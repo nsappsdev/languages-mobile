@@ -17,3 +17,14 @@ export const fixture: ReaderText = {
         clip: { id: 'clip2', sha256: 'hash2', mimeType: 'audio/wav', byteLength: 744, sampleRate: 100, frameCount: 350 } } },
   ],
 };
+
+export const sentenceFixture: ReaderText = {
+  ...fixture, text: 'A cat. A cat!',
+  sentences: [
+    { id: 's1', text: 'A cat.', charStart: 0, charEnd: 6, startSample: 0, endSample: 400 },
+    { id: 's2', text: 'A cat!', charStart: 7, charEnd: 13, startSample: 500, endSample: 900 },
+  ],
+  occurrences: fixture.occurrences.map((word, index) => index < 2 ? word : {
+    ...word, sentenceId: 's2', text: index === 2 ? 'A' : word.text,
+  }),
+};
