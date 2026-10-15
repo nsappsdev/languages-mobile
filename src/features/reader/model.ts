@@ -71,14 +71,19 @@ export function activeOccurrence(text: ReaderText, sample: number) {
   return text.occurrences.find(o => sample >= o.startSample && sample < o.endSample)?.id ?? null;
 }
 
+export function sentenceStartSample(text: ReaderText, occurrence: ReaderOccurrence) {
+  return text.sentences.find(sentence => sentence.id === occurrence.sentenceId)?.startSample
+    ?? text.occurrences.find(word => word.sentenceId === occurrence.sentenceId)?.startSample
+    ?? 0;
+}
+
 export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, states: Record<string, WordStatus>, startSample = 0) {
   const narration = (start: number, end: number): PlaybackStep => ({ asset: text.narration, channel: 'narration', startSample: start, endSample: end, narrationSample: start });
   if (mode.id === 'introduction') return [narration(startSample, text.narration.frameCount)];
   const steps: PlaybackStep[] = [];
   const unknown = text.occurrences.filter(o => o.learning && states[wordKey(text.textReleaseId, o.id)] === 'LEARNING');
-  // Character starts can land inside the first consonant. Keep the aligned
-  // inter-word gap with the upcoming word, rather than playing its onset before
-  // the pause. Use this same source boundary for the drill and narration resume.
+  // Character starts can land inside the first consonant. Keep the preceding
+  // gap in isolated replays so the word's onset is not clipped.
   const wordStarts = new Map(text.occurrences.map((o, index) => [o.id,
     index === 0 ? 0 : Math.min(o.startSample, text.occurrences[index - 1].endSample),
   ]));
@@ -88,7 +93,11 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
     for (const occurrence of unknown) {
       if (occurrence.endSample <= cursor || occurrence.startSample >= end || occurrence.endSample > end) continue;
       const wordStart = wordStarts.get(occurrence.id)!;
-      const handoff = Math.max(cursor, wordStart);
+      // Hear the complete word naturally before inserting its practice plays.
+      // Published clip bounds include speech tails beyond character timestamps.
+      // Resume at this same end boundary so context is neither skipped nor read
+      // a second time, and the following word's onset stays after the drill.
+      const handoff = occurrence.learning!.cutEndSample;
       if (cursor < handoff) steps.push(narration(cursor, handoff));
       // Render from the canonical narration so the lead-in before the published
       // clip's midpoint cut is included too. Library clips remain unchanged.
@@ -111,21 +120,22 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
   }
   let cursor = startSample;
   for (const [index, sentence] of text.sentences.entries()) {
-    if (sentence.endSample <= cursor) continue;
-    // Include the leading gap in this pass. Splitting at sentence.startSample
-    // would let the next sentence's first consonant leak before its word drill.
-    appendTeaching(cursor, sentence.endSample);
     const sentenceUnknown = unknown.filter(o => o.sentenceId === sentence.id);
+    const sentenceEnd = Math.max(sentence.endSample, ...sentenceUnknown.map(o => o.learning!.cutEndSample));
+    if (sentenceEnd <= cursor) continue;
+    // Keep inter-sentence audio in the natural pass, including word onsets that
+    // precede their character timestamp.
+    appendTeaching(cursor, sentenceEnd);
     if (sentenceUnknown.length >= (mode.repeatSentenceWhenUnknownCountAtLeast ?? 2)) {
       const count = Math.max(1, Math.min(20, mode.sentenceRepetitions ?? 2));
       // After word practice, replay the complete sentence normally, without
       // multiplying its word drills or truncating replays at the resume point.
       const firstWord = text.occurrences.find(o => o.sentenceId === sentence.id);
       const sentenceStart = firstWord ? wordStarts.get(firstWord.id)! : sentence.startSample;
-      for (let i = 0; i < count; i++) steps.push({ ...narration(sentenceStart, sentence.endSample), channel: 'drill',
+      for (let i = 0; i < count; i++) steps.push({ ...narration(sentenceStart, sentenceEnd), channel: 'drill',
         repetition: { kind: 'sentence', label: `Sentence ${index + 1}`, index: i + 1, total: count } });
     }
-    cursor = sentence.endSample;
+    cursor = sentenceEnd;
   }
   if (cursor < text.narration.frameCount) appendTeaching(cursor, text.narration.frameCount);
   return steps;
