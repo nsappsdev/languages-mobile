@@ -2,7 +2,7 @@ import { createContext, PropsWithChildren, useCallback, useContext, useState } f
 import { LayoutChangeEvent } from 'react-native';
 
 interface FooterInsetContextValue {
-  /** Total height of the floating footer (including safe-area padding). */
+  /** Total height of the bottom navigation (including safe-area padding). */
   footerHeight: number;
   /** Pass this to the footer wrapper's `onLayout` to keep the value in sync. */
   onFooterLayout: (event: LayoutChangeEvent) => void;

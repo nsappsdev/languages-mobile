@@ -1,10 +1,11 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSession } from '@/src/shared/auth/session-context';
 import { apiClient } from '@/src/shared/api/client';
-import { palette } from '@/src/shared/theme';
+import { controlSize, layout, palette, radii, spacing, typography } from '@/src/shared/theme';
 import type { AppSettings, ReadingModeSettings } from '@/src/types/domain';
 import { useResource } from './use-resource';
 import { usePlayback } from './use-playback';
@@ -96,13 +97,13 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
   };
   return <SafeAreaView style={styles.safe}>
     <View style={styles.header}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back to lessons" onPress={() => { audio.stop(); persist(); router.replace('/(tabs)/lessons'); }} style={styles.back}><Text style={styles.backText}>←</Text></Pressable>
-      <View style={{ flex: 1, gap: 3 }}><Text style={ui.eyebrow}>TEXT {textIndex + 1} OF {response.manifest.texts.length}</Text><Text numberOfLines={2} style={styles.lessonTitle}>{response.manifest.title}</Text></View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Back to lessons" onPress={() => { audio.stop(); persist(); router.replace('/(tabs)/lessons'); }} style={styles.back}><Ionicons name="arrow-back" size={22} color={palette.primaryStrong} accessible={false} /></Pressable>
+      <View style={styles.heading}><Text style={styles.textNumber}>TEXT {textIndex + 1} OF {response.manifest.texts.length}</Text><Text numberOfLines={2} style={styles.lessonTitle}>{response.manifest.title}</Text></View>
     </View>
     <ScrollView contentContainerStyle={styles.readingScroll}>
       <View style={styles.page}>
         <View style={ui.spread}><Text style={ui.eyebrow}>READ & LISTEN</Text><Text style={ui.subtitle}>{timeLabel(text.narration.frameCount / text.narration.sampleRate)}</Text></View>
-        <Text style={ui.subtitle}>While listening, tap any word to jump to the start of its sentence. Pause to mark words you do not know and see their translations.</Text>
+        <Text style={styles.instructions}>While listening, tap any word to jump to the start of its sentence. Pause to mark words you do not know and see their translations.</Text>
         <View style={styles.passageFlow}>
           {tokenized.prefix ? <Text style={[styles.passage, passageType(settings)]}>{tokenized.prefix}</Text> : null}
           {tokenized.tokens.map(token => <ReaderWordToken key={token.occurrence.id} {...token}
@@ -127,9 +128,9 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
       </Pressable>
       <View style={ui.spread}><Text style={styles.clock}>{timeLabel(position / text.narration.sampleRate)}</Text><Text style={styles.clock}>{timeLabel(text.narration.frameCount / text.narration.sampleRate)}</Text></View>
       <View style={styles.controls}>
-        <Action title="↺" label="Restart narration" secondary onPress={() => start(0)} />
-        <View style={{ flex: 1 }}><Action title={audio.loading ? 'Cancel loading' : audio.playing ? 'Pause' : audio.canResume ? '▶  Resume' : '▶  Play'} label={audio.loading ? 'Cancel loading audio' : audio.playing ? 'Pause narration' : 'Play narration'} onPress={() => { if (audio.playing || audio.loading) audio.pause(); else if (audio.canResume) void audio.resume(); else start(); }} /></View>
-        <Action title={finishing ? 'Saving…' : textIndex + 1 < response.manifest.texts.length ? 'Next text →' : 'Finish ✓'} label="Complete text" disabled={finishing} secondary onPress={() => { void finish(); }} />
+        <Action title="" icon="refresh-outline" label="Restart narration" secondary onPress={() => start(0)} />
+        <View style={styles.playButton}><Action title={audio.loading ? 'Cancel loading' : audio.playing ? 'Pause' : audio.canResume ? 'Resume' : 'Play'} icon={audio.loading ? 'close' : audio.playing ? 'pause' : 'play'} label={audio.loading ? 'Cancel loading audio' : audio.playing ? 'Pause narration' : 'Play narration'} onPress={() => { if (audio.playing || audio.loading) audio.pause(); else if (audio.canResume) void audio.resume(); else start(); }} /></View>
+        <Action title={finishing ? 'Saving…' : textIndex + 1 < response.manifest.texts.length ? 'Next text' : 'Finish'} icon={finishing ? undefined : textIndex + 1 < response.manifest.texts.length ? 'chevron-forward' : 'checkmark'} label="Complete text" disabled={finishing} secondary onPress={() => { void finish(); }} />
       </View>
     </View>
   </SafeAreaView>;
@@ -250,12 +251,14 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.canvas },
   loading: { padding: 24 },
-  header: { flexDirection: 'row', gap: 14, alignItems: 'center', alignSelf: 'center', maxWidth: 850, width: '100%', paddingHorizontal: 20, paddingVertical: 16 },
-  back: { minHeight: 48, width: 44, alignItems: 'center', justifyContent: 'center' },
-  backText: { fontSize: 27, color: palette.primaryStrong },
-  lessonTitle: { fontSize: 16, lineHeight: 21, fontWeight: '600', color: palette.ink },
-  readingScroll: { paddingHorizontal: 18, paddingBottom: 24, flexGrow: 1 },
-  page: { backgroundColor: palette.surface, borderRadius: 24, borderWidth: 1, borderColor: palette.border, padding: 24, gap: 20, width: '100%', maxWidth: 800, alignSelf: 'center' },
+  header: { flexDirection: 'row', gap: spacing[3], alignItems: 'center', alignSelf: 'center', maxWidth: layout.tabletMaxWidth, width: '100%', paddingHorizontal: layout.phoneGutter, paddingVertical: spacing[4], borderBottomWidth: 1, borderBottomColor: palette.border },
+  back: { minHeight: controlSize.standard, width: controlSize.standard, borderRadius: radii.lg, backgroundColor: palette.surface, alignItems: 'center', justifyContent: 'center' },
+  heading: { flex: 1, gap: spacing[1] },
+  textNumber: { color: palette.inkMuted, ...typography.caption },
+  lessonTitle: { ...typography.cardTitle, fontSize: 18, lineHeight: 24, color: palette.ink },
+  readingScroll: { paddingHorizontal: layout.phoneGutter, paddingBottom: spacing[8], flexGrow: 1 },
+  page: { paddingTop: spacing[5], gap: spacing[4], width: '100%', maxWidth: layout.readableMaxWidth, alignSelf: 'center' },
+  instructions: { color: palette.inkMuted, fontSize: 13, lineHeight: 20 },
   passageFlow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' },
   tokenGroup: { alignItems: 'flex-end', flexDirection: 'row', flexShrink: 0, marginBottom: 4 },
   token: { alignItems: 'center', flexShrink: 0, position: 'relative' },
@@ -264,16 +267,17 @@ const styles = StyleSheet.create({
   missingTranslation: { color: palette.danger, fontSize: 12 },
   passage: { color: palette.ink, fontSize: 27, lineHeight: 44 },
   currentWord: { backgroundColor: palette.primarySoft, color: palette.primaryStrong },
-  dock: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 12, backgroundColor: palette.canvas, width: '100%', maxWidth: 850, alignSelf: 'center', gap: 4 },
-  modeRow: { flexDirection: 'row', backgroundColor: palette.border, padding: 4, borderRadius: 15 },
-  mode: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12, borderRadius: 12 },
-  modeActive: { backgroundColor: palette.surface },
-  modeText: { fontSize: 13, fontWeight: '600', color: palette.inkMuted },
+  dock: { paddingHorizontal: layout.phoneGutter, paddingTop: spacing[3], paddingBottom: spacing[3], borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.surface, width: '100%', maxWidth: layout.tabletMaxWidth, alignSelf: 'center', gap: spacing[1] },
+  modeRow: { flexDirection: 'row', backgroundColor: palette.surfaceSubtle, padding: spacing[1], borderRadius: radii.lg },
+  mode: { flex: 1, minHeight: controlSize.standard, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing[1], paddingVertical: spacing[2], borderRadius: radii.md, borderWidth: 1, borderColor: 'transparent' },
+  modeActive: { backgroundColor: palette.surface, borderColor: palette.borderStrong },
+  modeText: { fontSize: 13, fontWeight: '600', color: palette.inkMuted, textAlign: 'center' },
   modeActiveText: { color: palette.primaryStrong },
-  timelineTouch: { height: 30, justifyContent: 'center' },
+  timelineTouch: { height: controlSize.standard, justifyContent: 'center', marginBottom: -spacing[2] },
   timeline: { height: 4, borderRadius: 2, backgroundColor: palette.border, overflow: 'hidden' },
   timelineFill: { height: 4, backgroundColor: palette.primary },
-  clock: { color: palette.inkMuted, fontSize: 11, fontVariant: ['tabular-nums'] },
+  clock: { color: palette.inkMuted, ...typography.caption, fontVariant: ['tabular-nums'] },
   repetition: { color: palette.primaryStrong, fontSize: 13, textAlign: 'center', paddingBottom: 6 },
-  controls: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 8 },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: spacing[2], paddingTop: spacing[2] },
+  playButton: { flex: 1 },
 });

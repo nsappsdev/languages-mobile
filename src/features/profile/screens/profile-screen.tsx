@@ -127,7 +127,6 @@ export function ProfileScreen() {
     <ScreenContainer scroll maxWidth={680}>
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.eyebrow}>Your account</Text>
           <Text accessibilityRole="header" style={styles.title}>
             Profile
           </Text>
@@ -280,18 +279,13 @@ function Row({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    gap: spacing[4],
+    gap: spacing[6],
+    paddingTop: spacing[3],
     paddingBottom: spacing[6],
   },
   header: {
-    gap: spacing[1],
+    gap: spacing[2],
     marginBottom: spacing[2],
-  },
-  eyebrow: {
-    color: text.brand,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
-    ...typography.caption,
   },
   title: {
     color: text.primary,
@@ -323,7 +317,7 @@ const styles = StyleSheet.create({
   identityIcon: {
     alignItems: 'center',
     backgroundColor: palette.primarySoft,
-    borderRadius: radii.full,
+    borderRadius: radii.lg,
     height: 48,
     justifyContent: 'center',
     width: 48,

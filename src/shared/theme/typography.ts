@@ -19,17 +19,11 @@ export const fontWeight = {
   bold: '700' as const,
 };
 
-export const fontFamily = {
-  editorial: 'SourceSerif4',
-  ui: 'LibreFranklin',
-  system: undefined,
-} as const;
-
 export const typography = {
-  display: { fontSize: 32, lineHeight: 40, fontWeight: fontWeight.bold },
-  screenTitle: { fontSize: 28, lineHeight: 36, fontWeight: fontWeight.bold },
-  sectionTitle: { fontSize: 24, lineHeight: 32, fontWeight: fontWeight.semibold },
-  cardTitle: { fontSize: 20, lineHeight: 28, fontWeight: fontWeight.semibold },
+  display: { fontSize: 32, lineHeight: 39, letterSpacing: -0.8, fontWeight: fontWeight.bold },
+  screenTitle: { fontSize: 30, lineHeight: 38, letterSpacing: -0.6, fontWeight: fontWeight.bold },
+  sectionTitle: { fontSize: 22, lineHeight: 30, letterSpacing: -0.3, fontWeight: fontWeight.semibold },
+  cardTitle: { fontSize: 20, lineHeight: 28, letterSpacing: -0.3, fontWeight: fontWeight.semibold },
   bodyLarge: { fontSize: 18, lineHeight: 30, fontWeight: fontWeight.regular },
   body: { fontSize: 16, lineHeight: 24, fontWeight: fontWeight.regular },
   label: { fontSize: 14, lineHeight: 20, fontWeight: fontWeight.semibold },

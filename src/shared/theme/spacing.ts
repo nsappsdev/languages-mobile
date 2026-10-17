@@ -15,7 +15,7 @@ export const spacing = {
 } as const;
 
 export const layout = {
-  phoneGutter: 16,
+  phoneGutter: 20,
   largePhoneGutter: 20,
   tabletGutter: 24,
   formMaxWidth: 420,

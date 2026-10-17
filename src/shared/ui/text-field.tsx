@@ -1,4 +1,4 @@
-import { forwardRef } from 'react';
+import { forwardRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { border, fontSize, fontWeight, radii, spacing, surface, text } from '@/src/shared/theme';
 
@@ -8,9 +8,10 @@ interface TextFieldProps extends TextInputProps {
 }
 
 export const TextField = forwardRef<TextInput, TextFieldProps>(function TextField(
-  { error, label, style, ...props },
+  { error, label, style, onFocus, onBlur, ...props },
   ref,
 ) {
+  const [focused, setFocused] = useState(false);
   return (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
@@ -18,7 +19,10 @@ export const TextField = forwardRef<TextInput, TextFieldProps>(function TextFiel
         ref={ref}
         accessibilityLabel={label}
         placeholderTextColor={text.placeholder}
-        style={[styles.input, error && styles.inputError, style]}
+        selectionColor={text.brand}
+        onFocus={event => { setFocused(true); onFocus?.(event); }}
+        onBlur={event => { setFocused(false); onBlur?.(event); }}
+        style={[styles.input, focused && styles.inputFocused, error && styles.inputError, style]}
         {...props}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -35,14 +39,16 @@ const styles = StyleSheet.create({
   },
   input: {
     backgroundColor: surface.input,
-    borderColor: border.default,
+    borderColor: border.strong,
     borderRadius: radii.lg,
     borderWidth: 1,
     color: text.primary,
     fontSize: fontSize.lg,
     minHeight: 48,
     paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
   },
+  inputFocused: { borderColor: border.active, backgroundColor: surface.card },
   inputError: { borderColor: border.error },
   error: { color: text.error, fontSize: fontSize.sm },
 });

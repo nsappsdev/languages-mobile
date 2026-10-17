@@ -11,8 +11,3 @@ export const iconSize = {
   xl: 24,
   hero: 44,
 } as const;
-
-export const progressSize = {
-  compact: 4,
-  standard: 8,
-} as const;
