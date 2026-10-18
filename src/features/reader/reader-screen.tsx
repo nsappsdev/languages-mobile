@@ -87,6 +87,23 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
       occurrenceId: occurrence.id, status, clientUpdatedAt: readerTimestamp() });
   };
   const [finishing, setFinishing] = useState(false);
+  const [activating, setActivating] = useState(false);
+  const [activationNotice, setActivationNotice] = useState('');
+  const [activationError, setActivationError] = useState('');
+  const unmarkedCount = response.manifest.texts.reduce((sum, item) => sum + item.occurrences.filter(o =>
+    o.learning && (!states[wordKey(item.textReleaseId, o.id)] || states[wordKey(item.textReleaseId, o.id)] === 'NEW')).length, 0);
+  const activateWords = async () => {
+    if (!token || !user || activating || !unmarkedCount) return;
+    setActivating(true); setActivationError(''); setActivationNotice(''); audio.stop();
+    try {
+      await flushReaderChanges();
+      if ((await pendingReaderChanges(user.id)).length) throw new Error('Connect to the internet to sync your word choices, then try again.');
+      const result = await apiClient.activateLessonVocabulary(token, response.publicationId, readerTimestamp());
+      setStates(previous => ({ ...previous, ...Object.fromEntries(result.words.map(w => [wordKey(w.textReleaseId, w.occurrenceId), w.status])) }));
+      setActivationNotice('Lesson words are marked unknown and added to your Library. You can change each word normally.');
+    } catch (error) { setActivationError(error instanceof Error ? error.message : 'Unable to mark lesson words. Try again when connected.'); }
+    finally { setActivating(false); }
+  };
   const finish = async () => {
     if (finishing) return;
     setFinishing(true); audio.stop();
@@ -104,12 +121,18 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
       <View style={styles.page}>
         <View style={ui.spread}><Text style={ui.eyebrow}>READ & LISTEN</Text><Text style={ui.subtitle}>{timeLabel(text.narration.frameCount / text.narration.sampleRate)}</Text></View>
         <Text style={styles.instructions}>While listening, tap any word to jump to the start of its sentence. Pause to mark words you do not know and see their translations.</Text>
+        <View style={styles.markAll}>
+          <Action title={activating ? 'Marking words…' : 'Mark all as unknown'} label="Mark all lesson words as unknown" secondary disabled={activating || finishing || !unmarkedCount} onPress={() => { void activateWords(); }} />
+          <Text style={styles.instructions}>{unmarkedCount ? `${unmarkedCount} unmarked ${unmarkedCount === 1 ? 'word or phrase' : 'words and phrases'} in this lesson` : 'All lesson words have a saved learning status'}</Text>
+        </View>
+        {activationNotice ? <Text accessibilityLiveRegion="polite" style={styles.instructions}>{activationNotice}</Text> : null}
+        {activationError ? <Text accessibilityRole="alert" style={ui.notice}>{activationError}</Text> : null}
         <View style={styles.passageFlow}>
           {tokenized.prefix ? <Text style={[styles.passage, passageType(settings)]}>{tokenized.prefix}</Text> : null}
           {tokenized.tokens.map(token => <ReaderWordToken key={token.occurrence.id} {...token}
             status={states[wordKey(text.textReleaseId, token.occurrence.id)]}
             active={token.occurrence.id === activeId && audio.playing}
-            disabled={finishing}
+            disabled={finishing || activating}
             pulseKey={audio.repetition?.kind === 'word' && audio.occurrenceId === token.occurrence.id ? `${audio.repetition.index}:${audio.repetition.total}` : null}
             settings={settings} onToggle={() => toggleUnknown(token.occurrence)}
             onSeek={audio.playing || audio.loading ? () => start(sentenceStartSample(text, token.occurrence)) : undefined} />)}
@@ -259,6 +282,7 @@ const styles = StyleSheet.create({
   readingScroll: { paddingHorizontal: layout.phoneGutter, paddingBottom: spacing[8], flexGrow: 1 },
   page: { paddingTop: spacing[5], gap: spacing[4], width: '100%', maxWidth: layout.readableMaxWidth, alignSelf: 'center' },
   instructions: { color: palette.inkMuted, fontSize: 13, lineHeight: 20 },
+  markAll: { alignItems: 'flex-start', gap: spacing[2] },
   passageFlow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-end' },
   tokenGroup: { alignItems: 'flex-end', flexDirection: 'row', flexShrink: 0, marginBottom: 4 },
   token: { alignItems: 'center', flexShrink: 0, position: 'relative' },

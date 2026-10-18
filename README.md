@@ -13,12 +13,13 @@ EXPO_PUBLIC_API_BASE_URL=http://YOUR_COMPUTER_LAN_IP:4000/api npm run web
 
 Use `npm start` for Expo device development. The API URL must be reachable from the device. Add the actual web origin to the local backend CORS allowlist. Never put provider keys in `EXPO_PUBLIC_*` variables. Existing `.env` files and EAS production configuration are not changed by the reader refactor.
 
-The backend needs the reader publication and text-authoring migrations. In admin, save a text, explicitly generate narration, select learning occurrences, add Armenian translations, and **Publish**. Publishing extracts missing clips and makes the complete lesson available to mobile in one action.
+The backend needs the reader publication, text-authoring and standalone-vocabulary migrations. In admin, save a text, explicitly generate narration, select learning occurrences, add Armenian translations, prepare word audio, and **Publish**. Audio preparation reuses saved recordings and generates missing words separately. Publishing makes the complete lesson available to mobile.
 
 ## Reader behavior
 
 - Lessons list only explicitly published manifests; `/runner/[lessonId]` is the single reader.
-- Sentences retain punctuation and use real narration sample boundaries. Selected occurrences open contextual meanings and clips cut from that narration.
+- Sentences retain punctuation and use real narration sample boundaries. Selected occurrences open contextual meanings and saved vocabulary recordings.
+- **Mark all as unknown** selects all unmarked admin learning words and phrases across the lesson and adds them to Library. Existing learned words are preserved. Individual word controls work normally afterward; removed words are not automatically selected again. This bulk action requires a connection and syncs queued individual choices first.
 - Listen plays the narration; Practice repeats occurrences marked for practice; Deep learning repeats sentences according to saved settings. There are no provider requests from mobile.
 - Words are heard naturally in context first, followed by the configured number of extra practice plays. The configured pause applies after that natural occurrence, between every practice play, and before narration continues after the word. Deep learning runs that word drill once, then the configured full-sentence replays. A visible counter shows the active play/replay; pausing retains the exact track position.
 - Words use text release and occurrence IDs, so equal spellings remain independent. Saved states are New, Learning, and Learned.
@@ -54,7 +55,13 @@ PCM WAV locally from the authenticated publication assets. It plays once rather
 than stopping, seeking and starting a player for every word. The source narration,
 clips, immutable publications and persisted learning states remain unchanged.
 
-Word practice pauses at the selected word's published clip end, keeping speech
+For new publications marked `clipSource: "VOCABULARY"`, word repetitions play
+the complete saved standalone recording. The narration handoff still uses the
+published source bounds, so context continues from the correct position. Audio
+assets, hashes and private caches are shared normally; repeated occurrences can
+reference one recording. Older publications retain the historical behavior below.
+
+Historical word practice pauses at the selected word's published clip end, keeping speech
 tails that extend beyond its character timestamp. Repeats use the
 canonical narration from the previous occurrence's end through the published
 clip's end, preserving the full onset even when character timestamps begin late.

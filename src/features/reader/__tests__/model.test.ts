@@ -52,6 +52,20 @@ describe('immutable occurrence-based reading', () => {
     const steps = buildPlayback(fixture, DEFAULT_MODES[1], { 'release-a:a1': 'LEARNING', 'release-a:cat1': 'LEARNED' });
     expect(steps.some(s => s.occurrenceId)).toBe(false);
   });
+  it('uses the complete saved vocabulary recording for phrase drills while keeping narration boundaries', () => {
+    const shared = { ...fixture, occurrences: fixture.occurrences.map(word => word.id === 'cat1' ? { ...word, text: 'bus stop', learning: {
+      ...word.learning!, clipSource: 'VOCABULARY' as const, clip: { ...word.learning!.clip, id: 'shared-phrase', frameCount: 734 },
+    } } : word) };
+    for (const mode of [DEFAULT_MODES[1], DEFAULT_MODES[2]]) {
+      const steps = buildPlayback(shared, mode, { 'release-a:cat1': 'LEARNING' });
+      const drills = steps.filter(step => step.occurrenceId === 'cat1');
+      expect(drills).toHaveLength(5);
+      expect(drills.every(step => step.asset.id === 'shared-phrase' && step.startSample === 0 && step.endSample === 734)).toBe(true);
+      expect(steps[0]).toMatchObject({ asset: fixture.narration, startSample: 0, endSample: 450 });
+      expect(steps[steps.indexOf(drills.at(-1)!) + 1]).toMatchObject({ asset: fixture.narration, startSample: 450 });
+      expect(steps.at(-1)).toMatchObject({ asset: fixture.narration, endSample: 1000 });
+    }
+  });
   it('deep learning repeats a sentence only when its unknown-occurrence threshold is met', () => {
     const steps = buildPlayback(fixture, DEFAULT_MODES[2], { 'release-a:cat1': 'LEARNING', 'release-a:cat2': 'LEARNING' });
     expect(steps.filter(s => s.occurrenceId === 'cat1')).toHaveLength(5);
