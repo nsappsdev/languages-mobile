@@ -6,11 +6,12 @@ import { DEFAULT_MODES, type PlaybackStep } from '../model';
 import { saveReaderChange } from '../state-store';
 import { sentenceFixture } from '../testing/fixture';
 import type { ReaderResponse } from '../types';
+import { apiClient } from '@/src/shared/api/client';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }), useFocusEffect: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
 jest.mock('@/src/shared/auth/session-context', () => ({ useSession: () => mockSession }));
-jest.mock('@/src/shared/api/client', () => ({ apiClient: {} }));
+jest.mock('@/src/shared/api/client', () => ({ apiClient: { activateLessonVocabulary: jest.fn() } }));
 jest.mock('../use-resource', () => ({ useResource: () => ({ value: mockResource, loading: false, error: null }) }));
 jest.mock('../use-playback', () => ({ usePlayback: () => mockAudio }));
 jest.mock('../sync-notice', () => ({ SyncNotice: () => null }));
@@ -56,6 +57,34 @@ beforeEach(async () => {
   await act(async () => { renderer = create(<ReaderScreen lessonId="test-lesson" />); });
 });
 afterEach(async () => { await act(async () => renderer.unmount()); jest.useRealTimers(); });
+
+it('marks all unmarked lesson words once and keeps individual word controls working afterward', async () => {
+  mockAudio.playing = false;
+  await refresh();
+  jest.mocked(apiClient.activateLessonVocabulary).mockResolvedValue({ activatedCount: 2, words: [
+    { textReleaseId: 'release-a', occurrenceId: 'cat1', status: 'LEARNING', clientUpdatedAt: '' },
+    { textReleaseId: 'release-a', occurrenceId: 'cat2', status: 'LEARNING', clientUpdatedAt: '' },
+  ] });
+  await act(async () => button('accessibilityLabel', 'Mark all lesson words as unknown').props.onPress());
+  expect(apiClient.activateLessonVocabulary).toHaveBeenCalledWith('test-token', 'test-publication', expect.any(String));
+  expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(true);
+  expect(button('testID', 'reader-word-cat2').props.accessibilityState.selected).toBe(true);
+  jest.mocked(saveReaderChange).mockClear();
+  await tapWord('cat1');
+  expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(false);
+  expect(saveReaderChange).toHaveBeenCalledWith('test-user', expect.objectContaining({ occurrenceId: 'cat1', status: 'NEW' }));
+  await refresh();
+  expect(apiClient.activateLessonVocabulary).toHaveBeenCalledTimes(1);
+  expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(false);
+});
+
+it('leaves word choices unchanged when bulk selection fails', async () => {
+  mockAudio.playing = false; await refresh();
+  jest.mocked(apiClient.activateLessonVocabulary).mockRejectedValue(new Error('Please reconnect and try again.'));
+  await act(async () => button('accessibilityLabel', 'Mark all lesson words as unknown').props.onPress());
+  expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(false);
+  expect(renderer.root.findAll(node => node.props.accessibilityRole === 'alert').some(node => node.props.children === 'Please reconnect and try again.')).toBe(true);
+});
 
 it.each(DEFAULT_MODES)('jumps forward and backward without changing vocabulary in $id mode', async mode => {
   await act(async () => button('accessibilityLabel', `Mode ${mode.displayName}`).props.onPress());

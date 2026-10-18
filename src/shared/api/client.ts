@@ -233,6 +233,11 @@ export const apiClient = {
   getWords(token: string) {
     return request<{ words: ReaderWord[] }>('/learner/words', { token, cache: 'no-store' });
   },
+  activateLessonVocabulary(token: string, publicationId: string, clientUpdatedAt: string) {
+    return request<{ words: ReaderResponse['words']; activatedCount: number }>(`/learner/publications/${encodeURIComponent(publicationId)}/activate-vocabulary`, {
+      method: 'POST', token, body: JSON.stringify({ clientUpdatedAt }),
+    });
+  },
   saveReaderChange(token: string, change: ReaderChange) {
     const { kind, ...body } = change;
     return request(kind === 'word' ? '/learner/word-state' : '/learner/reader-progress', {

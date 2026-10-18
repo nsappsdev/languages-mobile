@@ -102,9 +102,10 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
       // Render from the canonical narration so the lead-in before the published
       // clip's midpoint cut is included too. Library clips remain unchanged.
       for (let i = 0; i < wordCount; i++) {
-        steps.push({ asset: text.narration, channel: 'drill',
-          startSample: wordStart,
-          endSample: occurrence.learning!.cutEndSample,
+        const shared = occurrence.learning!.clipSource === 'VOCABULARY';
+        steps.push({ asset: shared ? occurrence.learning!.clip : text.narration, channel: 'drill',
+          startSample: shared ? 0 : wordStart,
+          endSample: shared ? occurrence.learning!.clip.frameCount : occurrence.learning!.cutEndSample,
           occurrenceId: occurrence.id, narrationSample: handoff,
           repetition: { kind: 'word', label: occurrence.text, index: i + 1, total: wordCount },
           pauseBefore: i === 0,
