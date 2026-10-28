@@ -257,6 +257,9 @@ export const apiClient = {
   getSettings(token: string) {
     return request<{ settings: AppSettings }>('/settings', { token, cache: 'no-store' });
   },
+  getReaderFontBytes(token: string, fontId: string, signal?: AbortSignal) {
+    return request<Uint8Array>(`/reader-fonts/${encodeURIComponent(fontId)}/content`, { token, responseType: 'bytes', signal });
+  },
   getAppVersion(token: string, platform: AppPlatform, buildNumber: number) {
     const params = new URLSearchParams({ platform, buildNumber: String(buildNumber) });
     return request<AppVersionResponse>(`/app-version?${params}`, { token });

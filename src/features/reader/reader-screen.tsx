@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSession } from '@/src/shared/auth/session-context';
@@ -15,6 +15,7 @@ import { flushReaderChanges, pendingReaderChanges, readerTimestamp, saveReaderCh
 import type { ReaderOccurrence, ReaderResponse, WordStatus } from './types';
 import { Action, ResourceState, ui } from './ui';
 import { SyncNotice } from './sync-notice';
+import { resolveReaderFonts } from './font-cache';
 
 export function ReaderScreen({ lessonId }: { lessonId: string }) {
   const pinned = useRef<string | null>(null);
@@ -23,7 +24,7 @@ export function ReaderScreen({ lessonId }: { lessonId: string }) {
     if (response.manifest.schemaVersion !== 2 || !response.manifest.texts.length) throw new Error('This lesson needs a published text version.');
     pinned.current = response.publicationId;
     const { settings } = await apiClient.getSettings(token);
-    return { response, settings };
+    return { response, ...await resolveReaderFonts(settings,token) };
   }, [lessonId]);
   const resource = useResource(load);
   if (!resource.value || resource.loading || resource.error) return <SafeAreaView style={styles.safe}><View style={styles.loading}>
@@ -32,7 +33,7 @@ export function ReaderScreen({ lessonId }: { lessonId: string }) {
   return <ReadingWorkspace key={resource.value.response.publicationId} {...resource.value} />;
 }
 
-function ReadingWorkspace({ response, settings }: { response: ReaderResponse; settings: AppSettings }) {
+function ReadingWorkspace({ response, settings, fontNotice }: { response: ReaderResponse; settings: AppSettings; fontNotice?: string }) {
   const router = useRouter();
   const { token, user } = useSession();
   const [textIndex, setTextIndex] = useState(() => Math.max(0, response.manifest.texts.findIndex(t => !response.progress.some(p => p.textReleaseId === t.textReleaseId && p.completed))));
@@ -121,6 +122,7 @@ function ReadingWorkspace({ response, settings }: { response: ReaderResponse; se
       <View style={styles.page}>
         <View style={ui.spread}><Text style={ui.eyebrow}>READ & LISTEN</Text><Text style={ui.subtitle}>{timeLabel(text.narration.frameCount / text.narration.sampleRate)}</Text></View>
         <Text style={styles.instructions}>While listening, tap any word to jump to the start of its sentence. Pause to mark words you do not know and see their translations.</Text>
+        {fontNotice?<Text accessibilityLiveRegion="polite" style={styles.instructions}>{fontNotice}</Text>:null}
         <View style={styles.markAll}>
           <Action title={activating ? 'Marking words…' : 'Mark all as unknown'} label="Mark all lesson words as unknown" secondary disabled={activating || finishing || !unmarkedCount} onPress={() => { void activateWords(); }} />
           <Text style={styles.instructions}>{unmarkedCount ? `${unmarkedCount} unmarked ${unmarkedCount === 1 ? 'word or phrase' : 'words and phrases'} in this lesson` : 'All lesson words have a saved learning status'}</Text>
@@ -164,7 +166,9 @@ function passageType(settings: AppSettings) {
   return {
     fontFamily: settings.mainTextFontFamily === 'System' ? undefined : settings.mainTextFontFamily,
     fontSize,
-    lineHeight: Math.ceil(fontSize * 4 / 3),
+    lineHeight: Math.ceil(fontSize * (settings.mainTextLineHeight ?? 4 / 3)-0.0001),
+    fontWeight: settings.mainTextFontId ? 'normal' as const : undefined,
+    includeFontPadding: false,
   };
 }
 
@@ -185,11 +189,14 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
   const missingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showMissing, setShowMissing] = useState(false);
   const [wordWidth, setWordWidth] = useState(0);
+  const {fontScale}=useWindowDimensions();
+  const [translationMeasurement,setTranslationMeasurement]=useState<{key:string;width:number}|null>(null);
   const unknown = status === 'LEARNING';
   const availableTranslation = meaning(occurrence).trim();
   const translation = unknown ? availableTranslation : '';
   const translationMaxSize = settings.translationFontMaxSize ?? settings.translationFontSize;
   const translationMinSize = Math.min(translationMaxSize, settings.translationFontMinSize);
+  const measureKey=`${settings.translationFontFamily}:${settings.translationFontId}:${translationMaxSize}:${fontScale}:${availableTranslation}`;
   const measuredWordWidth = wordWidth || Math.ceil(word.length * settings.mainTextFontSize * 0.56);
   const fittedTranslation = fitTranslationLabel({
     availableWidth: measuredWordWidth,
@@ -198,8 +205,10 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
     minFontSize: translationMinSize,
     minLetterSpacing: settings.translationLetterSpacingMin,
     text: availableTranslation,
+    measuredWidth:translationMeasurement?.key===measureKey?translationMeasurement.width:undefined,
+    fontScale,
   });
-  const translationLineHeight = Math.ceil(translationMaxSize + 4);
+  const translationLineHeight = Math.ceil((settings.translationLineHeight?translationMaxSize*settings.translationLineHeight:translationMaxSize+4)*fontScale-0.0001);
   const translationFontFamily = settings.translationFontFamily === 'System' ? undefined : settings.translationFontFamily;
   useEffect(() => {
     scale.stopAnimation();
@@ -242,16 +251,22 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
     outputRange: [0, 1, 1],
   });
 
-  const contents = <View style={styles.tokenGroup}>
-    <View style={[styles.token, { paddingTop: translationLineHeight + 2 }]}>
+  const contents = <View testID={`reader-row-gap-${occurrence.id}`} style={[styles.tokenGroup,{marginBottom:settings.readingRowGap??4}]}>
+    <View testID={`reader-translation-gap-${occurrence.id}`} style={[styles.token, { paddingTop: translationLineHeight + (settings.translationGap??2) }]}>
+      {availableTranslation?<View pointerEvents="none" accessible={false} accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={{position:'absolute',width:0,height:0,overflow:'hidden'}}>
+        <View style={{position:'absolute',width:100000}}><Text key={measureKey} testID={`measure-translation-${occurrence.id}`} accessible={false} numberOfLines={1}
+          onLayout={event=>{const width=event.nativeEvent.layout.width;if(width&&Number.isFinite(width))setTranslationMeasurement(old=>old?.key===measureKey&&old.width===width?old:{key:measureKey,width});}}
+          style={{alignSelf:'flex-start',opacity:0,fontFamily:translationFontFamily,fontSize:translationMaxSize,fontWeight:settings.translationFontId?'normal':'700',letterSpacing:0,includeFontPadding:false}}>{availableTranslation}</Text></View>
+      </View>:null}
       <View pointerEvents="none" style={[styles.translationLane, { height: translationLineHeight }]}>
         {showMissing ? <Animated.Text testID={`missing-translation-${occurrence.id}`} accessibilityLiveRegion="polite" numberOfLines={1}
           accessibilityLabel={`No translation available for ${word}`}
           style={[styles.tokenTranslation, styles.missingTranslation, { fontSize: Math.max(12, fittedTranslation.fontSize), height: translationLineHeight,
-            lineHeight: translationLineHeight, opacity: missingOpacity, transform: [{ scale: missingScale }], width: fittedTranslation.containerWidth }]}>∅</Animated.Text>
+            lineHeight: translationLineHeight/fontScale, opacity: missingOpacity, transform: [{ scale: missingScale }], width: fittedTranslation.containerWidth }]}>∅</Animated.Text>
           : translation ? <Animated.Text testID={`translation-${occurrence.id}`} accessibilityLiveRegion="polite" numberOfLines={1}
           style={[styles.tokenTranslation, { fontFamily: translationFontFamily, fontSize: fittedTranslation.fontSize,
-            height: translationLineHeight, letterSpacing: fittedTranslation.letterSpacing, lineHeight: translationLineHeight,
+            height: translationLineHeight, letterSpacing: fittedTranslation.letterSpacing, lineHeight: translationLineHeight/fontScale,
+            fontWeight:settings.translationFontId?'normal':'700',includeFontPadding:false,
             transform: [{ scale }], width: fittedTranslation.containerWidth }]}>{translation}</Animated.Text> : null}
       </View>
       <Text testID={`reader-word-text-${occurrence.id}`} onLayout={event => {

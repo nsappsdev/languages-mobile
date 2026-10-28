@@ -43,6 +43,13 @@ export interface ReadingModeSettings {
 }
 
 export interface AppSettings {
+  mainTextFontId?: string | null;
+  translationFontId?: string | null;
+  mainTextLineHeight?: number;
+  translationLineHeight?: number;
+  translationGap?: number;
+  readingRowGap?: number;
+  readerFonts?: { mainText: ReaderFont | null; translation: ReaderFont | null };
   id: string;
   readingModes: ReadingModeSettings[];
   mainTextFontFamily: string;
@@ -56,6 +63,11 @@ export interface AppSettings {
   wordRepetitionPauseMs: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ReaderFont {
+  id: string; label: string; format: string; sha256: string; byteLength: number;
+  supportsEnglish: boolean; supportsArmenian: boolean; available: boolean;
 }
 
 export type AppPlatform = 'android' | 'ios';
