@@ -17,6 +17,8 @@ The backend needs the reader publication, text-authoring and standalone-vocabula
 
 ## Reader behavior
 
+- Admin controls lesson-only English/Armenian font files, sizes, line heights, translation-to-English gap and wrapped-row gap. Reopen the lesson after saving appearance in admin.
+- Selected font files load through the authenticated API, deduplicate by immutable identity and cache on native devices. If loading fails, reading continues with a system font and a visible notice. Translation fitting uses measured glyph widths and respects accessibility font scaling. Vocabulary and other app screens retain their own styles.
 - Lessons list only explicitly published manifests; `/runner/[lessonId]` is the single reader.
 - Sentences retain punctuation and use real narration sample boundaries. Selected occurrences open contextual meanings and saved vocabulary recordings.
 - **Mark all as unknown** selects all unmarked admin learning words and phrases across the lesson and adds them to Library. Existing learned words are preserved. Individual word controls work normally afterward; removed words are not automatically selected again. This bulk action requires a connection and syncs queued individual choices first.

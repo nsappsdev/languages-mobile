@@ -17,4 +17,11 @@ describe('translation typography fitting', () => {
     expect(fitted.letterSpacing).toBe(-0.2);
     expect(fitted.containerWidth).toBeGreaterThan(45);
   });
+  it('fits using measured font glyph widths instead of character-count guesses',()=>{
+    const fitted=fitTranslationLabel({...settings,availableWidth:100,text:'պատուհան',measuredWidth:60});
+    expect(fitted.fontSize).toBe(15);
+    const wider=fitTranslationLabel({...settings,availableWidth:100,text:'պատուհան',measuredWidth:140});
+    expect(wider.fontSize).toBeLessThan(fitted.fontSize);
+    expect(wider.containerWidth).toBeLessThanOrEqual(100);
+  });
 });

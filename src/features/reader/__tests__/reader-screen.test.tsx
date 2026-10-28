@@ -1,4 +1,5 @@
 import React from 'react';
+import { Dimensions, StyleSheet } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import type { AppSettings } from '@/src/types/domain';
 import { ReaderScreen } from '../reader-screen';
@@ -125,4 +126,27 @@ it('keeps paused word selection and missing-translation feedback', async () => {
   await tapWord('a2');
   expect(renderer.root.findAll(node => node.props.testID === 'missing-translation-a2').length).toBeGreaterThan(0);
   expect(mockAudio.play).not.toHaveBeenCalled();
+});
+
+it('applies reader fonts, line heights and both gaps while fitting measured translations', async () => {
+  const original = mockResource.settings;
+  try {
+    mockResource.settings = { ...settings, mainTextFontFamily: 'reader-main', mainTextFontId: 'main', mainTextFontSize: 24, mainTextLineHeight: 1.5,
+      translationFontFamily: 'reader-armenian', translationFontId: 'armenian', translationFontMaxSize: 20,
+      translationLineHeight: 1.6, translationGap: 7, readingRowGap: 13 };
+    await refresh();
+    const node = (id: string) => renderer.root.findAll(item => item.props.testID === id)[0];
+    const fontScale = Dimensions.get('window').fontScale;
+    const translationHeight = Math.ceil(32 * fontScale);
+    expect(StyleSheet.flatten(node('reader-word-text-cat2').props.style)).toMatchObject({ fontFamily: 'reader-main', fontSize: 24, lineHeight: 36 });
+    expect(StyleSheet.flatten(node('reader-row-gap-cat2').props.style)).toMatchObject({ marginBottom: 13 });
+    expect(StyleSheet.flatten(node('reader-translation-gap-cat2').props.style)).toMatchObject({ paddingTop: translationHeight + 7 });
+    await act(async () => {
+      node('reader-word-text-cat2').props.onLayout({ nativeEvent: { layout: { width: 80 } } });
+      node('measure-translation-cat2').props.onLayout({ nativeEvent: { layout: { width: 30 } } });
+    });
+    expect(StyleSheet.flatten(node('translation-cat2').props.style)).toMatchObject({ fontFamily: 'reader-armenian', fontSize: 20, height: translationHeight, lineHeight: translationHeight / fontScale });
+  } finally {
+    mockResource.settings = original;
+  }
 });

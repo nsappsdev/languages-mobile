@@ -5,6 +5,8 @@ type TranslationFitInput = {
   minFontSize: number;
   minLetterSpacing: number;
   text: string;
+  measuredWidth?: number;
+  fontScale?: number;
 };
 
 const APPROX_ARMENIAN_CHAR_WIDTH = 0.9;
@@ -17,6 +19,8 @@ export function fitTranslationLabel({
   minFontSize,
   minLetterSpacing,
   text,
+  measuredWidth,
+  fontScale = 1,
 }: TranslationFitInput) {
   const normalizedText = text.trim();
   if (!normalizedText || availableWidth <= 0) {
@@ -24,12 +28,15 @@ export function fitTranslationLabel({
   }
 
   const textLength = normalizedText.length;
+  const width = (size: number, spacing: number) => measuredWidth === undefined
+    ? estimateTextWidth(textLength,size,spacing)
+    : measuredWidth * size / maxFontSize + Math.max(0,textLength-1)*spacing*fontScale;
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 1) {
-    if (estimateTextWidth(textLength, fontSize, minLetterSpacing) <= availableWidth) {
+    if (width(fontSize, minLetterSpacing) <= availableWidth) {
       const letterSpacing = Math.min(maxLetterSpacing, Math.max(minLetterSpacing,
-        (availableWidth - textLength * fontSize * APPROX_ARMENIAN_CHAR_WIDTH) / Math.max(1, textLength - 1)));
+        (availableWidth - width(fontSize,0)) / (Math.max(1, textLength - 1)*fontScale)));
       return {
-        containerWidth: Math.ceil(Math.max(availableWidth, estimateTextWidth(textLength, fontSize, letterSpacing))),
+        containerWidth: Math.ceil(Math.max(availableWidth, width(fontSize, letterSpacing))),
         fontSize,
         letterSpacing: Number(letterSpacing.toFixed(2)),
       };
@@ -37,7 +44,7 @@ export function fitTranslationLabel({
   }
 
   return {
-    containerWidth: Math.ceil(estimateTextWidth(textLength, minFontSize, minLetterSpacing) + WIDTH_SAFETY_PX),
+    containerWidth: Math.ceil(width(minFontSize, minLetterSpacing) + WIDTH_SAFETY_PX),
     fontSize: minFontSize,
     letterSpacing: minLetterSpacing,
   };
