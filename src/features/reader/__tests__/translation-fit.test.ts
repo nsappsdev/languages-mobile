@@ -24,4 +24,10 @@ describe('translation typography fitting', () => {
     expect(wider.fontSize).toBeLessThan(fitted.fontSize);
     expect(wider.containerWidth).toBeLessThanOrEqual(100);
   });
+
+  it('allows for enlarged system text before font measurements arrive', () => {
+    const normal = fitTranslationLabel({ ...settings, availableWidth: 45, text: 'պատուհան' });
+    const large = fitTranslationLabel({ ...settings, availableWidth: 45, text: 'պատուհան', fontScale: 2 });
+    expect(large.containerWidth).toBeGreaterThan(normal.containerWidth);
+  });
 });

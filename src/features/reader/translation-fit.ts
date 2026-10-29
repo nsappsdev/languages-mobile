@@ -29,7 +29,7 @@ export function fitTranslationLabel({
 
   const textLength = normalizedText.length;
   const width = (size: number, spacing: number) => measuredWidth === undefined
-    ? estimateTextWidth(textLength,size,spacing)
+    ? estimateTextWidth(textLength,size,spacing) * fontScale
     : measuredWidth * size / maxFontSize + Math.max(0,textLength-1)*spacing*fontScale;
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 1) {
     if (width(fontSize, minLetterSpacing) <= availableWidth) {

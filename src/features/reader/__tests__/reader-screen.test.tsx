@@ -145,8 +145,25 @@ it('applies reader fonts, line heights and both gaps while fitting measured tran
       node('reader-word-text-cat2').props.onLayout({ nativeEvent: { layout: { width: 80 } } });
       node('measure-translation-cat2').props.onLayout({ nativeEvent: { layout: { width: 30 } } });
     });
-    expect(StyleSheet.flatten(node('translation-cat2').props.style)).toMatchObject({ fontFamily: 'reader-armenian', fontSize: 20, height: translationHeight, lineHeight: translationHeight / fontScale });
+    expect(StyleSheet.flatten(node('translation-cat2').props.style)).toMatchObject({ fontFamily: 'reader-armenian', fontSize: 20, minHeight: translationHeight, lineHeight: translationHeight / fontScale });
   } finally {
     mockResource.settings = original;
   }
+});
+
+it('reserves enough room above the English word for the complete translation', async () => {
+  const node = (id: string) => renderer.root.findAll(item => item.props.testID === id)[0];
+  await act(async () => {
+    node('reader-word-text-cat2').props.onLayout({ nativeEvent: { layout: { width: 24 } } });
+    node('measure-translation-cat2').props.onLayout({ nativeEvent: { layout: { width: 1200 } } });
+  });
+  const label = node('translation-cat2');
+  const labelStyle = StyleSheet.flatten(label.props.style);
+  expect(label.props.children).toBe('երկրորդ կատու');
+  expect(label.props.numberOfLines).toBeUndefined();
+  expect(labelStyle.height).toBeUndefined();
+  expect(labelStyle.width).toBeLessThanOrEqual(Dimensions.get('window').width - 40);
+  expect(StyleSheet.flatten(node('reader-translation-gap-cat2').props.style).minWidth).toBe(labelStyle.width);
+  await act(async () => label.props.onLayout({ nativeEvent: { layout: { height: 64 } } }));
+  expect(StyleSheet.flatten(node('reader-translation-gap-cat2').props.style).paddingTop).toBe(66);
 });

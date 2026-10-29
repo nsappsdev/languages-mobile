@@ -47,7 +47,7 @@ it('rejects incomplete font downloads instead of registering them',async()=>{
 });
 it('loads an existing validated native cache file without a download',async()=>{
   mockOS='ios';const font={...base,id:'cached-font',sha256:'c'.repeat(64)};
-  const key=encodeURIComponent(`https://example.test/api:${readerFontFamily(font)}`);
+  const key=encodeURIComponent(`https://example.test/api:${readerFontFamily(font)}`).replace(/%/g,'_');
   const path=`file:///cache/reader-fonts/${key}.ttf`;mockFiles.set(path,bytes);
   await expect(loadReaderFont(font,'token')).resolves.toBe(readerFontFamily(font));
   expect(apiClient.getReaderFontBytes).not.toHaveBeenCalled();expect(Font.loadAsync).toHaveBeenCalledWith(readerFontFamily(font),path);
