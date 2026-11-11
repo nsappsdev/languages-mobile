@@ -20,7 +20,10 @@ export async function loadReaderFont(font: ReaderFont, token: string): Promise<s
   if (Platform.OS !== 'web' && Font.isLoaded(family)) return family;
   const existing = loaded.get(key); if (existing) return existing;
   const load = async () => {
-    const target = root ? `${root}${encodeURIComponent(key)}.${font.format}` : null;
+    // Android decodes file URI escapes, so escaped URL slashes cannot remain
+    // in the basename. Use the same filesystem-safe encoding as reader audio.
+    const cacheKey = encodeURIComponent(key).replace(/%/g, '_');
+    const target = root ? `${root}${cacheKey}.${font.format}` : null;
     if (Platform.OS !== 'web' && target) {
       const info = await FileSystem.getInfoAsync(target);
       if (info.exists && !info.isDirectory && info.size === font.byteLength) {

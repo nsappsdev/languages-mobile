@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dimensions, StyleSheet } from 'react-native';
+import { Animated, Dimensions, StyleSheet } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import type { AppSettings } from '@/src/types/domain';
 import { ReaderScreen } from '../reader-screen';
@@ -37,7 +37,7 @@ const settings: AppSettings = {
 };
 const mockResource = { response, settings };
 const mockAudio = {
-  playing: true, loading: false, sample: 100, occurrenceId: null, repetition: undefined as PlaybackStep['repetition'],
+  playing: true, loading: false, sample: 100, occurrenceId: null as string | null, repetition: undefined as PlaybackStep['repetition'],
   error: null, canResume: false, setSample: jest.fn(),
   play: jest.fn(async (_steps: PlaybackStep[], _pauseMs: number) => undefined),
   pause: jest.fn(), stop: jest.fn(), resume: jest.fn(),
@@ -53,7 +53,7 @@ const refresh = () => act(async () => renderer.update(<ReaderScreen lessonId="te
 
 beforeEach(async () => {
   jest.useFakeTimers(); jest.clearAllMocks();
-  Object.assign(mockAudio, { playing: true, loading: false, sample: 100, repetition: undefined });
+  Object.assign(mockAudio, { playing: true, loading: false, sample: 100, occurrenceId: null, repetition: undefined });
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   await act(async () => { renderer = create(<ReaderScreen lessonId="test-lesson" />); });
 });
@@ -85,6 +85,27 @@ it('leaves word choices unchanged when bulk selection fails', async () => {
   await act(async () => button('accessibilityLabel', 'Mark all lesson words as unknown').props.onPress());
   expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(false);
   expect(renderer.root.findAll(node => node.props.accessibilityRole === 'alert').some(node => node.props.children === 'Please reconnect and try again.')).toBe(true);
+});
+
+it('shows the names and order saved by admin while retaining each mode behavior', async () => {
+  const original = mockResource.settings;
+  try {
+    mockResource.settings = { ...settings, readingModes: settings.readingModes.map((mode, index) => ({
+      ...mode, displayName: ['First listen', 'Word practice', 'Sentence practice'][index], order: 2 - index,
+    })) };
+    await refresh();
+    const modes = renderer.root.findAll(node => typeof node.props.onPress === 'function'
+      && node.props.accessibilityLabel?.startsWith('Mode '));
+    expect(modes.map(node => node.props.accessibilityLabel)).toEqual([
+      'Mode Sentence practice', 'Mode Word practice', 'Mode First listen',
+    ]);
+    for (const mode of mockResource.settings.readingModes) {
+      expect(button('accessibilityLabel', `Mode ${mode.displayName}`).findAll(node => node.props.children === mode.displayName).length).toBeGreaterThan(0);
+    }
+    await act(async () => button('accessibilityLabel', 'Mode Word practice').props.onPress());
+    await tapWord('a1');
+    expect(mockAudio.play.mock.calls.at(-1)![0].some(step => step.repetition?.kind === 'word')).toBe(true);
+  } finally { mockResource.settings = original; }
 });
 
 it.each(DEFAULT_MODES)('jumps forward and backward without changing vocabulary in $id mode', async mode => {
@@ -128,6 +149,56 @@ it('keeps paused word selection and missing-translation feedback', async () => {
   expect(mockAudio.play).not.toHaveBeenCalled();
 });
 
+it.each(DEFAULT_MODES)('pulses the translation on the first natural reading in $id mode', async mode => {
+  const start = jest.fn();
+  const animation = jest.spyOn(Animated, 'sequence').mockReturnValue({ start, stop: jest.fn(), reset: jest.fn() });
+  try {
+    await act(async () => button('accessibilityLabel', `Mode ${mode.displayName}`).props.onPress());
+    mockAudio.sample = 650;
+    await refresh();
+    expect(start).not.toHaveBeenCalled();
+    mockAudio.sample = 700;
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(1);
+    mockAudio.sample = 750;
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(1);
+  } finally { animation.mockRestore(); }
+});
+
+it('pulses on each word and sentence replay, with no new pulse in a gap or while paused', async () => {
+  const start = jest.fn();
+  const animation = jest.spyOn(Animated, 'sequence').mockReturnValue({ start, stop: jest.fn(), reset: jest.fn() });
+  try {
+    mockAudio.sample = 700;
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(1);
+    mockAudio.occurrenceId = 'cat2';
+    mockAudio.repetition = { kind: 'word', label: 'cat', index: 1, total: 2 };
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(2);
+    mockAudio.occurrenceId = null;
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(2);
+    mockAudio.occurrenceId = 'cat2';
+    mockAudio.repetition = { ...mockAudio.repetition, index: 2 };
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(3);
+    mockAudio.occurrenceId = null;
+    mockAudio.repetition = { kind: 'sentence', label: 'Sentence 2', index: 1, total: 2 };
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(4);
+    mockAudio.repetition = { ...mockAudio.repetition, index: 2 };
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(5);
+    mockAudio.playing = false;
+    await refresh();
+    mockAudio.sample = 750;
+    await refresh();
+    expect(start).toHaveBeenCalledTimes(5);
+  } finally { animation.mockRestore(); }
+});
+
 it('applies reader fonts, line heights and both gaps while fitting measured translations', async () => {
   const original = mockResource.settings;
   try {
@@ -145,8 +216,26 @@ it('applies reader fonts, line heights and both gaps while fitting measured tran
       node('reader-word-text-cat2').props.onLayout({ nativeEvent: { layout: { width: 80 } } });
       node('measure-translation-cat2').props.onLayout({ nativeEvent: { layout: { width: 30 } } });
     });
-    expect(StyleSheet.flatten(node('translation-cat2').props.style)).toMatchObject({ fontFamily: 'reader-armenian', fontSize: 20, height: translationHeight, lineHeight: translationHeight / fontScale });
+    expect(StyleSheet.flatten(node('translation-cat2').props.style)).toMatchObject({ fontFamily: 'reader-armenian', fontSize: 20, minHeight: translationHeight, lineHeight: translationHeight / fontScale });
   } finally {
     mockResource.settings = original;
   }
+});
+
+it('keeps the complete translation on one line above its word, even on a narrow screen', async () => {
+  const node = (id: string) => renderer.root.findAll(item => item.props.testID === id)[0];
+  await act(async () => {
+    node('reader-word-text-cat2').props.onLayout({ nativeEvent: { layout: { width: 24 } } });
+    node('measure-translation-cat2').props.onLayout({ nativeEvent: { layout: { width: 1200 } } });
+  });
+  const label = node('translation-cat2');
+  const labelStyle = StyleSheet.flatten(label.props.style);
+  expect(label.props.children).toBe('երկրորդ կատու');
+  expect(label.props.numberOfLines).toBe(1);
+  expect(labelStyle.height).toBeUndefined();
+  expect(labelStyle.width).toBeLessThanOrEqual(Dimensions.get('window').width - 40);
+  expect(StyleSheet.flatten(node('reader-translation-gap-cat2').props.style).minWidth).toBe(labelStyle.width);
+  const fontScale = Dimensions.get('window').fontScale;
+  expect(StyleSheet.flatten(node('reader-translation-gap-cat2').props.style).paddingTop).toBe(Math.ceil(16 * fontScale) + 2);
+  expect(labelStyle.fontSize).toBeLessThan(settings.translationFontMinSize);
 });

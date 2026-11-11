@@ -45,6 +45,10 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
   const audio = usePlayback(token ?? '', user?.id ?? '', response.publicationId);
   const tokenized = textTokens(text);
   const activeId = audio.occurrenceId ?? activeOccurrence(text, audio.sample);
+  const pulseOccurrenceId = audio.playing
+    ? audio.repetition?.kind === 'word' ? audio.occurrenceId : activeId
+    : null;
+  const pulseKey = audio.repetition ? `${audio.repetition.kind}:${audio.repetition.index}:${audio.repetition.total}` : 'narration';
   const position = Math.min(text.narration.frameCount, audio.sample);
   const [timelineWidth, setTimelineWidth] = useState(0);
   const progressRef = useRef({ sample: 0, textReleaseId: text.textReleaseId, frameCount: text.narration.frameCount });
@@ -135,7 +139,7 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
             status={states[wordKey(text.textReleaseId, token.occurrence.id)]}
             active={token.occurrence.id === activeId && audio.playing}
             disabled={finishing || activating}
-            pulseKey={audio.repetition?.kind === 'word' && audio.occurrenceId === token.occurrence.id ? `${audio.repetition.index}:${audio.repetition.total}` : null}
+            pulseKey={pulseOccurrenceId === token.occurrence.id ? pulseKey : null}
             settings={settings} onToggle={() => toggleUnknown(token.occurrence)}
             onSeek={audio.playing || audio.loading ? () => start(sentenceStartSample(text, token.occurrence)) : undefined} />)}
         </View>
@@ -146,7 +150,7 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
       {audio.error ? <Text accessibilityRole="alert" style={ui.notice}>{audio.error}</Text> : null}
       {audio.repetition ? <Text accessibilityLiveRegion="polite" style={styles.repetition}>{audio.repetition.label} · {audio.repetition.kind === 'word' ? 'Play' : 'Replay'} {audio.repetition.index} of {audio.repetition.total}{audio.canResume ? ' · Paused' : ''}</Text> : null}
       <View style={styles.modeRow}>{availableModes.map(item => <Pressable key={item.id} accessibilityRole="button" accessibilityLabel={`Mode ${item.displayName}`} accessibilityState={{ selected: item.id === mode.id }}
-        onPress={() => { audio.stop(); setMode(item); }} style={[styles.mode, item.id === mode.id && styles.modeActive]}><Text style={[styles.modeText, item.id === mode.id && styles.modeActiveText]}>{item.id === 'introduction' ? 'Listen' : item.id === 'teaching' ? 'Practice' : 'Deep learning'}</Text></Pressable>)}</View>
+        onPress={() => { audio.stop(); setMode(item); }} style={[styles.mode, item.id === mode.id && styles.modeActive]}><Text style={[styles.modeText, item.id === mode.id && styles.modeActiveText]}>{item.displayName}</Text></Pressable>)}</View>
       <Pressable accessibilityRole="button" accessibilityLabel="Seek narration" onLayout={event => setTimelineWidth(event.nativeEvent.layout.width)}
         onPress={event => { if (timelineWidth) start(Math.round(Math.max(0, Math.min(1, event.nativeEvent.locationX / timelineWidth)) * text.narration.frameCount)); }} style={styles.timelineTouch}>
         <View style={styles.timeline}><View style={[styles.timelineFill, { width: `${position / text.narration.frameCount * 100}%` }]} /></View>
@@ -189,7 +193,8 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
   const missingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showMissing, setShowMissing] = useState(false);
   const [wordWidth, setWordWidth] = useState(0);
-  const {fontScale}=useWindowDimensions();
+  const [suffixWidth, setSuffixWidth] = useState<number | null>(null);
+  const {fontScale,width:screenWidth}=useWindowDimensions();
   const [translationMeasurement,setTranslationMeasurement]=useState<{key:string;width:number}|null>(null);
   const unknown = status === 'LEARNING';
   const availableTranslation = meaning(occurrence).trim();
@@ -207,8 +212,11 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
     text: availableTranslation,
     measuredWidth:translationMeasurement?.key===measureKey?translationMeasurement.width:undefined,
     fontScale,
+    maxContainerWidth: Math.max(1, Math.min(layout.readableMaxWidth, screenWidth - 2 * layout.phoneGutter)
+      - (suffixWidth ?? Math.ceil(suffix.length * settings.mainTextFontSize * 0.56 * fontScale))),
   });
   const translationLineHeight = Math.ceil((settings.translationLineHeight?translationMaxSize*settings.translationLineHeight:translationMaxSize+4)*fontScale-0.0001);
+  const translationWidth = fittedTranslation.containerWidth;
   const translationFontFamily = settings.translationFontFamily === 'System' ? undefined : settings.translationFontFamily;
   useEffect(() => {
     scale.stopAnimation();
@@ -252,29 +260,34 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
   });
 
   const contents = <View testID={`reader-row-gap-${occurrence.id}`} style={[styles.tokenGroup,{marginBottom:settings.readingRowGap??4}]}>
-    <View testID={`reader-translation-gap-${occurrence.id}`} style={[styles.token, { paddingTop: translationLineHeight + (settings.translationGap??2) }]}>
+    <View testID={`reader-translation-gap-${occurrence.id}`} style={[styles.token, {
+      paddingTop: translationLineHeight + (settings.translationGap??2), minWidth: translation ? translationWidth : undefined,
+    }]}>
       {availableTranslation?<View pointerEvents="none" accessible={false} accessibilityElementsHidden aria-hidden importantForAccessibility="no-hide-descendants" style={{position:'absolute',width:0,height:0,overflow:'hidden'}}>
         <View style={{position:'absolute',width:100000}}><Text key={measureKey} testID={`measure-translation-${occurrence.id}`} accessible={false} numberOfLines={1}
           onLayout={event=>{const width=event.nativeEvent.layout.width;if(width&&Number.isFinite(width))setTranslationMeasurement(old=>old?.key===measureKey&&old.width===width?old:{key:measureKey,width});}}
           style={{alignSelf:'flex-start',opacity:0,fontFamily:translationFontFamily,fontSize:translationMaxSize,fontWeight:settings.translationFontId?'normal':'700',letterSpacing:0,includeFontPadding:false}}>{availableTranslation}</Text></View>
       </View>:null}
-      <View pointerEvents="none" style={[styles.translationLane, { height: translationLineHeight }]}>
+      <View pointerEvents="none" style={[styles.translationLane, { minHeight: translationLineHeight }]}>
         {showMissing ? <Animated.Text testID={`missing-translation-${occurrence.id}`} accessibilityLiveRegion="polite" numberOfLines={1}
           accessibilityLabel={`No translation available for ${word}`}
           style={[styles.tokenTranslation, styles.missingTranslation, { fontSize: Math.max(12, fittedTranslation.fontSize), height: translationLineHeight,
             lineHeight: translationLineHeight/fontScale, opacity: missingOpacity, transform: [{ scale: missingScale }], width: fittedTranslation.containerWidth }]}>∅</Animated.Text>
           : translation ? <Animated.Text testID={`translation-${occurrence.id}`} accessibilityLiveRegion="polite" numberOfLines={1}
           style={[styles.tokenTranslation, { fontFamily: translationFontFamily, fontSize: fittedTranslation.fontSize,
-            height: translationLineHeight, letterSpacing: fittedTranslation.letterSpacing, lineHeight: translationLineHeight/fontScale,
-            fontWeight:settings.translationFontId?'normal':'700',includeFontPadding:false,
-            transform: [{ scale }], width: fittedTranslation.containerWidth }]}>{translation}</Animated.Text> : null}
+            minHeight: translationLineHeight, letterSpacing: fittedTranslation.letterSpacing, lineHeight: translationLineHeight/fontScale,
+            fontWeight:settings.translationFontId?'normal':'700',includeFontPadding:true,
+            transform: [{ scale }], width: translationWidth }]}>{translation}</Animated.Text> : null}
       </View>
       <Text testID={`reader-word-text-${occurrence.id}`} onLayout={event => {
-        const width = Math.round(event.nativeEvent.layout.width);
+        const width = Math.ceil(event.nativeEvent.layout.width);
         setWordWidth(previous => previous === width ? previous : width);
       }} style={[styles.passage, passageType(settings), active && styles.currentWord]}>{word}</Text>
     </View>
-    {suffix ? <Text style={[styles.passage, passageType(settings)]}>{suffix}</Text> : null}
+    {suffix ? <Text onLayout={event => {
+      const width = Math.ceil(event.nativeEvent.layout.width);
+      setSuffixWidth(previous => previous === width ? previous : width);
+    }} style={[styles.passage, passageType(settings)]}>{suffix}</Text> : null}
   </View>;
 
   return <Pressable testID={`reader-word-${occurrence.id}`} accessibilityRole="button"

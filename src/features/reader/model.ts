@@ -82,10 +82,13 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
   if (mode.id === 'introduction') return [narration(startSample, text.narration.frameCount)];
   const steps: PlaybackStep[] = [];
   const unknown = text.occurrences.filter(o => o.learning && states[wordKey(text.textReleaseId, o.id)] === 'LEARNING');
+  const sentenceRanges = new Map(text.narrationSource === 'SENTENCES'
+    ? text.sentences.map(sentence => [sentence.id, sentence]) : []);
   // Character starts can land inside the first consonant. Keep the preceding
   // gap in isolated replays so the word's onset is not clipped.
   const wordStarts = new Map(text.occurrences.map((o, index) => [o.id,
-    index === 0 ? 0 : Math.min(o.startSample, text.occurrences[index - 1].endSample),
+    Math.max(sentenceRanges.get(o.sentenceId)?.startSample ?? 0,
+      index === 0 ? 0 : Math.min(o.startSample, text.occurrences[index - 1].endSample)),
   ]));
   const wordCount = Math.max(1, Math.min(20, mode.unknownWordRepetitions ?? 5));
   const appendTeaching = (begin: number, end: number) => {
@@ -97,7 +100,8 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
       // Published clip bounds include speech tails beyond character timestamps.
       // Resume at this same end boundary so context is neither skipped nor read
       // a second time, and the following word's onset stays after the drill.
-      const handoff = occurrence.learning!.cutEndSample;
+      const handoff = Math.min(occurrence.learning!.cutEndSample,
+        sentenceRanges.get(occurrence.sentenceId)?.endSample ?? text.narration.frameCount);
       if (cursor < handoff) steps.push(narration(cursor, handoff));
       // Render from the canonical narration so the lead-in before the published
       // clip's midpoint cut is included too. Library clips remain unchanged.
@@ -105,7 +109,7 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
         const shared = occurrence.learning!.clipSource === 'VOCABULARY';
         steps.push({ asset: shared ? occurrence.learning!.clip : text.narration, channel: 'drill',
           startSample: shared ? 0 : wordStart,
-          endSample: shared ? occurrence.learning!.clip.frameCount : occurrence.learning!.cutEndSample,
+          endSample: shared ? occurrence.learning!.clip.frameCount : handoff,
           occurrenceId: occurrence.id, narrationSample: handoff,
           repetition: { kind: 'word', label: occurrence.text, index: i + 1, total: wordCount },
           pauseBefore: i === 0,
@@ -122,7 +126,8 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
   let cursor = startSample;
   for (const [index, sentence] of text.sentences.entries()) {
     const sentenceUnknown = unknown.filter(o => o.sentenceId === sentence.id);
-    const sentenceEnd = Math.max(sentence.endSample, ...sentenceUnknown.map(o => o.learning!.cutEndSample));
+    const sentenceEnd = sentenceRanges.get(sentence.id)?.endSample
+      ?? Math.max(sentence.endSample, ...sentenceUnknown.map(o => o.learning!.cutEndSample));
     if (sentenceEnd <= cursor) continue;
     // Keep inter-sentence audio in the natural pass, including word onsets that
     // precede their character timestamp.
@@ -132,7 +137,8 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
       // After word practice, replay the complete sentence normally, without
       // multiplying its word drills or truncating replays at the resume point.
       const firstWord = text.occurrences.find(o => o.sentenceId === sentence.id);
-      const sentenceStart = firstWord ? wordStarts.get(firstWord.id)! : sentence.startSample;
+      const sentenceStart = sentenceRanges.get(sentence.id)?.startSample
+        ?? (firstWord ? wordStarts.get(firstWord.id)! : sentence.startSample);
       for (let i = 0; i < count; i++) steps.push({ ...narration(sentenceStart, sentenceEnd), channel: 'drill',
         repetition: { kind: 'sentence', label: `Sentence ${index + 1}`, index: i + 1, total: count } });
     }
