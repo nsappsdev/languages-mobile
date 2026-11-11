@@ -7,6 +7,7 @@ type TranslationFitInput = {
   text: string;
   measuredWidth?: number;
   fontScale?: number;
+  maxContainerWidth?: number;
 };
 
 const APPROX_ARMENIAN_CHAR_WIDTH = 0.9;
@@ -21,35 +22,43 @@ export function fitTranslationLabel({
   text,
   measuredWidth,
   fontScale = 1,
+  maxContainerWidth = Infinity,
 }: TranslationFitInput) {
   const normalizedText = text.trim();
   if (!normalizedText || availableWidth <= 0) {
     return { containerWidth: Math.max(1, availableWidth), fontSize: maxFontSize, letterSpacing: maxLetterSpacing };
   }
 
-  const textLength = normalizedText.length;
+  const textLength = Array.from(normalizedText).length;
+  const containerWidth = Math.min(availableWidth, maxContainerWidth);
+  // Leave room for glyph hinting, fractional layout and trailing letter spacing.
+  const availableTextWidth = Math.max(0, containerWidth - WIDTH_SAFETY_PX);
   const width = (size: number, spacing: number) => measuredWidth === undefined
     ? estimateTextWidth(textLength,size,spacing) * fontScale
-    : measuredWidth * size / maxFontSize + Math.max(0,textLength-1)*spacing*fontScale;
+    : measuredWidth * size / maxFontSize + textLength * spacing * fontScale;
   for (let fontSize = maxFontSize; fontSize >= minFontSize; fontSize -= 1) {
-    if (width(fontSize, minLetterSpacing) <= availableWidth) {
-      const letterSpacing = Math.min(maxLetterSpacing, Math.max(minLetterSpacing,
-        (availableWidth - width(fontSize,0)) / (Math.max(1, textLength - 1)*fontScale)));
+    if (width(fontSize, minLetterSpacing) <= availableTextWidth) {
+      const letterSpacing = Math.max(minLetterSpacing, Math.floor(Math.min(maxLetterSpacing,
+        (availableTextWidth - width(fontSize,0)) / (textLength * fontScale)) * 100) / 100);
       return {
-        containerWidth: Math.ceil(Math.max(availableWidth, width(fontSize, letterSpacing))),
+        containerWidth: Math.min(maxContainerWidth, Math.ceil(containerWidth)),
         fontSize,
-        letterSpacing: Number(letterSpacing.toFixed(2)),
+        letterSpacing,
       };
     }
   }
 
+  // Expand the word/translation pair together. Only exceptionally long labels
+  // need to shrink below the preferred minimum to stay on one line on a phone.
+  const minimumWidth = width(minFontSize, minLetterSpacing);
+  const scale = Math.min(1, Math.max(1, maxContainerWidth - WIDTH_SAFETY_PX) / minimumWidth);
   return {
-    containerWidth: Math.ceil(width(minFontSize, minLetterSpacing) + WIDTH_SAFETY_PX),
-    fontSize: minFontSize,
-    letterSpacing: minLetterSpacing,
+    containerWidth: Math.min(maxContainerWidth, Math.ceil(Math.max(containerWidth, minimumWidth * scale + WIDTH_SAFETY_PX))),
+    fontSize: minFontSize * scale,
+    letterSpacing: minLetterSpacing * scale,
   };
 }
 
 function estimateTextWidth(textLength: number, fontSize: number, letterSpacing: number) {
-  return textLength * fontSize * APPROX_ARMENIAN_CHAR_WIDTH + Math.max(0, textLength - 1) * letterSpacing;
+  return textLength * (fontSize * APPROX_ARMENIAN_CHAR_WIDTH + letterSpacing);
 }

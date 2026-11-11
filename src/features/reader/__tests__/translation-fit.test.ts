@@ -30,4 +30,25 @@ describe('translation typography fitting', () => {
     const large = fitTranslationLabel({ ...settings, availableWidth: 45, text: 'պատուհան', fontScale: 2 });
     expect(large.containerWidth).toBeGreaterThan(normal.containerWidth);
   });
+
+  it.each([
+    { text: 'անընդհատ', availableWidth: 62, measuredWidth: 87.859375 },
+    { text: 'մարդաշատ', availableWidth: 70, measuredWidth: 91.765625 },
+    { text: 'անձրևանոց', availableWidth: 70, measuredWidth: 94.296875 },
+  ])('keeps space for the final glyph of $text', input => {
+    const fitted = fitTranslationLabel({ ...settings, ...input });
+    const renderedWidth = input.measuredWidth * fitted.fontSize / settings.maxFontSize
+      + Array.from(input.text).length * fitted.letterSpacing;
+    expect(fitted.containerWidth - renderedWidth).toBeGreaterThanOrEqual(8);
+  });
+
+  it('fits a translation wider than a phone onto one complete line', () => {
+    const fitted = fitTranslationLabel({ ...settings, text: 'երկրորդ կատու', availableWidth: 24,
+      measuredWidth: 1200, maxContainerWidth: 280 });
+    const renderedWidth = 1200 * fitted.fontSize / settings.maxFontSize
+      + Array.from('երկրորդ կատու').length * fitted.letterSpacing;
+    expect(fitted.containerWidth).toBeLessThanOrEqual(280);
+    expect(renderedWidth + 8).toBeLessThanOrEqual(fitted.containerWidth);
+    expect(fitted.fontSize).toBeLessThan(settings.minFontSize);
+  });
 });

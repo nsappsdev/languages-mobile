@@ -75,3 +75,37 @@ it('waits for WebKit to load actual font bytes before registering a browser font
   expect(mockBrowserFontAdd).toHaveBeenCalledTimes(1);
   expect(URL.createObjectURL).not.toHaveBeenCalled();
 });
+
+it('switches between fonts with the same label and reuses only the matching cached face',async()=>{
+  const first={...base,id:'switch-first',label:'Reader font',sha256:'1'.repeat(64)};
+  const second={...base,id:'switch-second',label:'Reader font',sha256:'2'.repeat(64)};
+  const select=(font:ReaderFont)=>resolveReaderFonts({...settings,mainTextFontId:font.id,translationFontId:font.id,
+    readerFonts:{mainText:font,translation:font}},'token');
+  expect((await select(first)).settings.translationFontFamily).toBe(readerFontFamily(first));
+  const changed=await select(second);
+  expect(changed.settings.mainTextFontFamily).toBe(readerFontFamily(second));
+  expect(changed.settings.translationFontFamily).toBe(readerFontFamily(second));
+  expect((await select(first)).settings.mainTextFontFamily).toBe(readerFontFamily(first));
+  expect(jest.mocked(apiClient.getReaderFontBytes).mock.calls).toEqual([
+    ['token',first.id,expect.any(AbortSignal)],['token',second.id,expect.any(AbortSignal)],
+  ]);
+});
+
+it('uses a new registered family when a font content version changes',async()=>{
+  const first={...base,id:'versioned-font',sha256:'3'.repeat(64)};
+  const replacement={...first,sha256:'4'.repeat(64)};
+  await loadReaderFont(first,'token');
+  expect(await loadReaderFont(replacement,'token')).not.toBe(readerFontFamily(first));
+  expect(apiClient.getReaderFontBytes).toHaveBeenCalledTimes(2);
+  expect(mockFontFace).toHaveBeenLastCalledWith(readerFontFamily(replacement),new Uint8Array(bytes).buffer);
+});
+
+it('replaces a damaged native cache file before registering the selected font',async()=>{
+  mockOS='android';const font={...base,id:'damaged-cache',sha256:'5'.repeat(64)};
+  const key=encodeURIComponent(`https://example.test/api:${readerFontFamily(font)}`).replace(/%/g,'_');
+  const path=`file:///cache/reader-fonts/${key}.ttf`;mockFiles.set(path,new Uint8Array(8));
+  await loadReaderFont(font,'token');
+  expect(apiClient.getReaderFontBytes).toHaveBeenCalledTimes(1);
+  expect(mockFiles.get(path)).toEqual(bytes);
+  expect(Font.loadAsync).toHaveBeenCalledWith(readerFontFamily(font),path);
+});

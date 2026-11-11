@@ -2,6 +2,30 @@ import { activeOccurrence, buildPlayback, DEFAULT_MODES, meaning, nextUnknownSta
 import { fixture, sentenceFixture } from '../testing/fixture';
 
 describe('immutable occurrence-based reading', () => {
+  it.each([1, 2])('respects separately recorded sentence boundaries in mode %i', modeIndex => {
+    const text = { ...sentenceFixture, narrationSource: 'SENTENCES' as const,
+      sentences: [{ ...sentenceFixture.sentences[0], endSample: 480 },
+        { ...sentenceFixture.sentences[1], startSample: 480, endSample: 1000 }],
+      occurrences: sentenceFixture.occurrences.map(word => word.id === 'cat1' ? {
+        ...word, learning: { ...word.learning!, cutEndSample: 490 },
+      } : word.id === 'a2' ? {
+        ...word, learning: { ...fixture.occurrences[1].learning!, cutStartSample: 490, cutEndSample: 650 },
+      } : word),
+    };
+    const mode = { ...DEFAULT_MODES[modeIndex], unknownWordRepetitions: 1, repeatSentenceWhenUnknownCountAtLeast: 1, sentenceRepetitions: 1 };
+    const steps = buildPlayback(text, mode, { 'release-a:cat1': 'LEARNING', 'release-a:a2': 'LEARNING' });
+    expect(steps.find(step => step.occurrenceId === 'cat1')).toMatchObject({ endSample: 480, narrationSample: 480 });
+    expect(steps.find(step => step.occurrenceId === 'a2')).toMatchObject({ startSample: 480, endSample: 650 });
+    const narration = steps.filter(step => step.channel === 'narration');
+    expect(narration[0].startSample).toBe(0);
+    expect(narration.at(-1)?.endSample).toBe(1000);
+    narration.slice(1).forEach((step, index) => expect(step.startSample).toBe(narration[index].endSample));
+    if (modeIndex === 2) expect(steps.filter(step => step.repetition?.kind === 'sentence').map(step => [step.startSample, step.endSample]))
+      .toEqual([[0, 480], [480, 1000]]);
+    const resumed = buildPlayback(text, mode, { 'release-a:a2': 'LEARNING' }, 550);
+    expect(resumed[0].startSample).toBe(550);
+    if (modeIndex === 2) expect(resumed.find(step => step.repetition?.kind === 'sentence')?.startSample).toBe(480);
+  });
   it('preserves source punctuation and gives repeated words independent meanings', () => {
     expect(sentenceParts(fixture, fixture.sentences[0]).map(p => p.text).join('')).toBe(fixture.text);
     const tokenized = sentenceTokens(fixture, fixture.sentences[0]);

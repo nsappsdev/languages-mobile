@@ -18,11 +18,12 @@ The backend needs the reader publication, text-authoring and standalone-vocabula
 ## Reader behavior
 
 - Admin controls lesson-only English/Armenian font files, sizes, line heights, translation-to-English gap and wrapped-row gap. Reopen the lesson after saving appearance in admin.
-- Selected font files load through the authenticated API, deduplicate by immutable identity and cache on native devices. If loading fails, reading continues with a system font and a visible notice. Translation fitting uses measured glyph widths and respects accessibility font scaling. Vocabulary and other app screens retain their own styles.
+- Selected font files load through the authenticated API, deduplicate by immutable identity and cache on native devices. If loading fails, reading continues with a system font and a visible notice. Translation fitting uses measured glyph widths and accessibility font scaling, keeping the complete translation on one line above its English word. Exceptionally long labels can shrink below the preferred minimum to fit the available row. Vocabulary and other app screens retain their own styles.
 - Lessons list only explicitly published manifests; `/runner/[lessonId]` is the single reader.
-- Sentences retain punctuation and use real narration sample boundaries. Selected occurrences open contextual meanings and saved vocabulary recordings.
+- Sentences retain punctuation and use real narration sample boundaries. New `narrationSource: "SENTENCES"` publications use full recorded sentence bounds for replay and drill handoffs; older publications retain their existing fallback. Selected occurrences open contextual meanings and saved vocabulary recordings.
 - **Mark all as unknown** selects all unmarked admin learning words and phrases across the lesson and adds them to Library. Existing learned words are preserved. Individual word controls work normally afterward; removed words are not automatically selected again. This bulk action requires a connection and syncs queued individual choices first.
-- Listen plays the narration; Practice repeats occurrences marked for practice; Deep learning repeats sentences according to saved settings. There are no provider requests from mobile.
+- Mode names, order and enabled state follow admin settings. The introduction mode plays narration; teaching repeats occurrences marked for practice; deep learning repeats sentences according to saved settings. There are no provider requests from mobile.
+- Translation pulses start with the first natural reading of an unknown word and repeat for vocabulary and sentence replays. Pausing and gaps between vocabulary recordings do not start new pulses.
 - Words are heard naturally in context first, followed by the configured number of extra practice plays. The configured pause applies after that natural occurrence, between every practice play, and before narration continues after the word. Deep learning runs that word drill once, then the configured full-sentence replays. A visible counter shows the active play/replay; pausing retains the exact track position.
 - Words use text release and occurrence IDs, so equal spellings remain independent. Saved states are New, Learning, and Learned.
 - One playback controller owns a player for the prepared continuous track and cancels playback on mode changes, navigation, and backgrounding.
@@ -32,6 +33,8 @@ The backend needs the reader publication, text-authoring and standalone-vocabula
 Modules separate DTOs, rendering/playback rules, audio cache, queued state, playback lifecycle, and the three screens (Lessons, Reader, Words). Authenticated learner endpoints live under `/api/learner`; admin audio routes remain restricted to admins.
 
 ## Verification
+
+See [the 10–11 November 2026 session notes](docs/session-2026-11-11.md) for the sentence-audio, translation, mode-name and font-cache checks, including native-device limitations.
 
 ```sh
 npm test
