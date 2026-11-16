@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,7 +21,7 @@ export function ReaderScreen({ lessonId }: { lessonId: string }) {
   const pinned = useRef<string | null>(null);
   const load = useCallback(async (token: string) => {
     const response = pinned.current ? await apiClient.getPublication(token, pinned.current) : await apiClient.getLesson(token, lessonId);
-    if (response.manifest.schemaVersion !== 2 || !response.manifest.texts.length) throw new Error('This lesson needs a published text version.');
+    if (![2, 3].includes(response.manifest.schemaVersion) || !response.manifest.texts.length) throw new Error('This lesson needs a published text version.');
     pinned.current = response.publicationId;
     const { settings } = await apiClient.getSettings(token);
     return { response, ...await resolveReaderFonts(settings,token) };
@@ -39,8 +39,10 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
   const [textIndex, setTextIndex] = useState(() => Math.max(0, response.manifest.texts.findIndex(t => !response.progress.some(p => p.textReleaseId === t.textReleaseId && p.completed))));
   const text = response.manifest.texts[textIndex];
   const [states, setStates] = useState<Record<string, WordStatus>>(() => Object.fromEntries(response.words.map(w => [wordKey(w.textReleaseId, w.occurrenceId), w.status])));
-  const modes = settings.readingModes.filter(m => m.enabled).sort((a, b) => a.order - b.order);
-  const availableModes = modes.length ? modes : [DEFAULT_MODES[0]];
+  const availableModes = useMemo(() => {
+    const modes = settings.readingModes.filter(m => m.enabled).sort((a, b) => a.order - b.order);
+    return modes.length ? modes : [DEFAULT_MODES[0]];
+  }, [settings.readingModes]);
   const [mode, setMode] = useState<ReadingModeSettings>(() => availableModes[0]);
   const audio = usePlayback(token ?? '', user?.id ?? '', response.publicationId);
   const tokenized = textTokens(text);
@@ -50,6 +52,14 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
     : null;
   const pulseKey = audio.repetition ? `${audio.repetition.kind}:${audio.repetition.index}:${audio.repetition.total}` : 'narration';
   const position = Math.min(text.narration.frameCount, audio.sample);
+  const plans = useMemo(() => availableModes.map(item => ({ id: item.id, steps: buildPlayback(text, item, states) })), [availableModes, text, states]);
+  const preloadFrom = text.sentences.find(sentence => position < sentence.endSample)?.startSample ?? 0;
+  const warm = audio.warm;
+  useEffect(() => {
+    const candidates = audio.playing || audio.loading ? plans.filter(plan => plan.id !== mode.id)
+      : [...plans.filter(plan => plan.id === mode.id), ...plans.filter(plan => plan.id !== mode.id)];
+    warm(candidates.map(plan => plan.steps), settings.wordRepetitionPauseMs, preloadFrom);
+  }, [warm, plans, mode.id, settings.wordRepetitionPauseMs, preloadFrom, audio.playing, audio.loading]);
   const [timelineWidth, setTimelineWidth] = useState(0);
   const progressRef = useRef({ sample: 0, textReleaseId: text.textReleaseId, frameCount: text.narration.frameCount });
   const previousPlaying = useRef(false);
@@ -81,7 +91,7 @@ function ReadingWorkspace({ response, settings, fontNotice }: { response: Reader
   }, [response.progress, setSample, text.textReleaseId, user]);
   const start = (sample = position) => {
     const from = sample >= text.narration.frameCount - 1 ? 0 : sample;
-    void audio.play(buildPlayback(text, mode, states, from), settings.wordRepetitionPauseMs);
+    void audio.play(plans.find(plan => plan.id === mode.id)?.steps ?? buildPlayback(text, mode, states), settings.wordRepetitionPauseMs, response.publicationId, from);
   };
   const toggleUnknown = (occurrence: ReaderOccurrence) => {
     if (!occurrence.learning || !user || audio.playing || audio.loading) return;

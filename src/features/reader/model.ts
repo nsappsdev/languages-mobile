@@ -7,12 +7,14 @@ export const meaning = (word: ReaderOccurrence) => (word.learning?.translations.
 export const timeLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 export interface PlaybackStep {
+  segmentId?: string;
   asset: ReaderAsset;
   channel?: 'narration' | 'drill';
   startSample: number;
   endSample: number;
   occurrenceId?: string;
   narrationSample: number;
+  timelineOffset?: number;
   repetition?: { kind: 'word' | 'sentence'; label: string; index: number; total: number };
   pauseBefore?: boolean;
   pauseAfter?: boolean;
@@ -78,8 +80,18 @@ export function sentenceStartSample(text: ReaderText, occurrence: ReaderOccurren
 }
 
 export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, states: Record<string, WordStatus>, startSample = 0) {
-  const narration = (start: number, end: number): PlaybackStep => ({ asset: text.narration, channel: 'narration', startSample: start, endSample: end, narrationSample: start });
-  if (mode.id === 'introduction') return [narration(startSample, text.narration.frameCount)];
+  const narration = (start: number, end: number): PlaybackStep[] => {
+    if (end <= start) return [];
+    if ('id' in text.narration) return [{ asset: text.narration, channel: 'narration', startSample: start, endSample: end, narrationSample: start }];
+    return text.sentences.flatMap(sentence => {
+      const first = Math.max(start, sentence.startSample), last = Math.min(end, sentence.endSample);
+      if (last <= first) return [];
+      if (!sentence.asset) throw new Error('Sentence recording is missing. Download this lesson again.');
+      return [{ asset: sentence.asset, segmentId: sentence.id, channel: 'narration' as const, startSample: first - sentence.startSample,
+        endSample: last - sentence.startSample, narrationSample: first, timelineOffset: sentence.startSample }];
+    });
+  };
+  if (mode.id === 'introduction') return narration(startSample, text.narration.frameCount);
   const steps: PlaybackStep[] = [];
   const unknown = text.occurrences.filter(o => o.learning && states[wordKey(text.textReleaseId, o.id)] === 'LEARNING');
   const sentenceRanges = new Map(text.narrationSource === 'SENTENCES'
@@ -102,22 +114,23 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
       // a second time, and the following word's onset stays after the drill.
       const handoff = Math.min(occurrence.learning!.cutEndSample,
         sentenceRanges.get(occurrence.sentenceId)?.endSample ?? text.narration.frameCount);
-      if (cursor < handoff) steps.push(narration(cursor, handoff));
-      // Render from the canonical narration so the lead-in before the published
-      // clip's midpoint cut is included too. Library clips remain unchanged.
+      if (cursor < handoff) steps.push(...narration(cursor, handoff));
+      // Sentence lessons replay the original occurrence, including its lead-in,
+      // even when an older publication contains separately generated word audio.
+      // This preserves the exact voice, emphasis and pronunciation heard in context.
       for (let i = 0; i < wordCount; i++) {
-        const shared = occurrence.learning!.clipSource === 'VOCABULARY';
-        steps.push({ asset: shared ? occurrence.learning!.clip : text.narration, channel: 'drill',
-          startSample: shared ? 0 : wordStart,
-          endSample: shared ? occurrence.learning!.clip.frameCount : handoff,
+        const shared = 'id' in text.narration && occurrence.learning!.clipSource === 'VOCABULARY';
+        const source = shared ? [{ asset: occurrence.learning!.clip, startSample: 0, endSample: occurrence.learning!.clip.frameCount }]
+          : narration(wordStart, handoff);
+        steps.push(...source.map(step => ({ ...step, channel: 'drill' as const,
           occurrenceId: occurrence.id, narrationSample: handoff,
-          repetition: { kind: 'word', label: occurrence.text, index: i + 1, total: wordCount },
+          repetition: { kind: 'word' as const, label: occurrence.text, index: i + 1, total: wordCount },
           pauseBefore: i === 0,
-          pauseAfter: true });
+          pauseAfter: true })));
       }
       cursor = handoff;
     }
-    if (cursor < end) steps.push(narration(cursor, end));
+    if (cursor < end) steps.push(...narration(cursor, end));
   };
   if (mode.id === 'teaching') {
     appendTeaching(startSample, text.narration.frameCount);
@@ -139,8 +152,8 @@ export function buildPlayback(text: ReaderText, mode: ReadingModeSettings, state
       const firstWord = text.occurrences.find(o => o.sentenceId === sentence.id);
       const sentenceStart = sentenceRanges.get(sentence.id)?.startSample
         ?? (firstWord ? wordStarts.get(firstWord.id)! : sentence.startSample);
-      for (let i = 0; i < count; i++) steps.push({ ...narration(sentenceStart, sentenceEnd), channel: 'drill',
-        repetition: { kind: 'sentence', label: `Sentence ${index + 1}`, index: i + 1, total: count } });
+      for (let i = 0; i < count; i++) steps.push(...narration(sentenceStart, sentenceEnd).map(step => ({ ...step, channel: 'drill' as const,
+        repetition: { kind: 'sentence' as const, label: `Sentence ${index + 1}`, index: i + 1, total: count } })));
     }
     cursor = sentenceEnd;
   }

@@ -46,10 +46,10 @@ it('deduplicates concurrent authenticated downloads without putting a token in t
   expect(fetchAudio).toHaveBeenCalledWith('private-token', 'pub-a', asset.id);
   expect(assetCacheKey('user-a', 'pub-a', asset)).not.toContain('private-token');
 });
-it('separates users, publications and audio revisions', () => {
+it('separates users and audio revisions while reusing unchanged audio across publications', () => {
   const key = assetCacheKey('user-a', 'pub-a', asset);
   expect(assetCacheKey('user-b', 'pub-a', asset)).not.toBe(key);
-  expect(assetCacheKey('user-a', 'pub-b', asset)).not.toBe(key);
+  expect(assetCacheKey('user-a', 'pub-b', asset)).toBe(key);
   expect(assetCacheKey('user-a', 'pub-a', { ...asset, sha256: 'new-hash' })).not.toBe(key);
 });
 it('never caches a truncated or non-audio response and allows a retry', async () => {

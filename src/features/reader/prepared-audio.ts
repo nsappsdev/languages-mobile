@@ -8,7 +8,7 @@ import { createPlaybackTrack, decodeReaderWav, type PlaybackTrack } from './play
 export type PreparedAudio = Omit<PlaybackTrack, 'parts'> & { uri: string; dispose: () => void };
 
 export async function prepareAudio(steps: PlaybackStep[], pauseMs: number, token: string, userId: string,
-  publicationId: string, signal: AbortSignal): Promise<PreparedAudio> {
+  publicationId: string, signal: AbortSignal, padEnd = false): Promise<PreparedAudio> {
   const check = () => { if (signal.aborted) throw new Error('Playback cancelled'); };
   check();
   const assets = [...new Map(steps.map(step => [step.asset.id, step.asset])).values()];
@@ -22,7 +22,7 @@ export async function prepareAudio(steps: PlaybackStep[], pauseMs: number, token
     check();
     decoded.set(asset.id, decodeReaderWav(bytes));
   }
-  const { parts, ...track } = createPlaybackTrack(steps, decoded, pauseMs);
+  const { parts, ...track } = createPlaybackTrack(steps, decoded, pauseMs, padEnd);
   check();
   if (Platform.OS === 'web') {
     const uri = URL.createObjectURL(new Blob(parts as BlobPart[], { type: 'audio/wav' }));
