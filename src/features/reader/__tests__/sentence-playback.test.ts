@@ -180,3 +180,29 @@ it('disposes late warm-up results and never creates a player after leaving', asy
   const track = prepared(steps(1)); resolve(track); await flush();
   expect(track.dispose).toHaveBeenCalledTimes(1); expect(createAudioPlaylist).not.toHaveBeenCalled();
 });
+
+it('preloads library clips with two workers and reuses them without starting audio', async () => {
+  const waiting: (() => void)[] = [];
+  jest.mocked(prepareAudio).mockImplementation(input => new Promise(resolve => { waiting.push(() => resolve(prepared(input))); }));
+  engine.preload(steps(5).map(step => [step]), 0, 'pub'); await flush();
+  expect(prepareAudio).toHaveBeenCalledTimes(2); expect(createAudioPlaylist).not.toHaveBeenCalled();
+  waiting.splice(0).forEach(resolve => resolve()); await jest.advanceTimersByTimeAsync(1);
+  expect(prepareAudio).toHaveBeenCalledTimes(4);
+  waiting.splice(0).forEach(resolve => resolve()); await jest.advanceTimersByTimeAsync(1);
+  waiting.splice(0).forEach(resolve => resolve()); await flush();
+  expect(prepareAudio).toHaveBeenCalledTimes(5); expect(createAudioPlaylist).not.toHaveBeenCalled();
+  await engine.play([steps(5)[3]], 0, 'pub');
+  expect(prepareAudio).toHaveBeenCalledTimes(5); expect(state.playing).toBe(true);
+});
+
+it('stops queued library preparation when leaving and retries failed clips on demand', async () => {
+  let finish!: () => void;
+  jest.mocked(prepareAudio).mockImplementationOnce(input => new Promise(resolve => { finish = () => resolve(prepared(input)); }))
+    .mockRejectedValueOnce(new Error('Offline'));
+  const cancel = engine.preload(steps(5).map(step => [step]), 0, 'pub'); await flush();
+  cancel(); finish(); await jest.advanceTimersByTimeAsync(1);
+  expect(prepareAudio).toHaveBeenCalledTimes(2);
+  await engine.play([steps(5)[1]], 0, 'pub');
+  expect(state.error).toBeNull(); expect(state.playing).toBe(true);
+  expect(prepareAudio).toHaveBeenCalledTimes(3);
+});

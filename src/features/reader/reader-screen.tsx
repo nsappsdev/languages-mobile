@@ -292,7 +292,7 @@ function ReaderWordToken({ occurrence, word, suffix, status, active, disabled, p
       <Text testID={`reader-word-text-${occurrence.id}`} onLayout={event => {
         const width = Math.ceil(event.nativeEvent.layout.width);
         setWordWidth(previous => previous === width ? previous : width);
-      }} style={[styles.passage, passageType(settings), active && styles.currentWord]}>{word}</Text>
+      }} style={[styles.passage, passageType(settings), unknown && styles.unknownWord, active && styles.currentWord]}>{word}</Text>
     </View>
     {suffix ? <Text onLayout={event => {
       const width = Math.ceil(event.nativeEvent.layout.width);
@@ -328,6 +328,7 @@ const styles = StyleSheet.create({
   tokenTranslation: { color: palette.primaryStrong, fontWeight: '700', overflow: 'visible', textAlign: 'center' },
   missingTranslation: { color: palette.danger, fontSize: 12 },
   passage: { color: palette.ink, fontSize: 27, lineHeight: 44 },
+  unknownWord: { color: palette.primaryStrong },
   currentWord: { backgroundColor: palette.primarySoft, color: palette.primaryStrong },
   dock: { paddingHorizontal: layout.phoneGutter, paddingTop: spacing[3], paddingBottom: spacing[3], borderTopWidth: 1, borderTopColor: palette.border, backgroundColor: palette.surface, width: '100%', maxWidth: layout.tabletMaxWidth, alignSelf: 'center', gap: spacing[1] },
   modeRow: { flexDirection: 'row', backgroundColor: palette.surfaceSubtle, padding: spacing[1], borderRadius: radii.lg },

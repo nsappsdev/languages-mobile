@@ -20,6 +20,10 @@ export function usePlayback(token: string, userId: string, publicationId: string
     // Refresh credentials recreate the engine; consumers must warm that new instance.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     engine.current?.warm(plans, pauseMs, publicationId, sample), [publicationId, token, userId]);
+  const preload = useCallback((plans: PlaybackStep[][], pauseMs = 0) =>
+    // Like warm, rerun when refreshed credentials recreate the engine.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    engine.current?.preload(plans, pauseMs, publicationId), [publicationId, token, userId]);
   const resume = useCallback(() => engine.current?.resume() ?? Promise.resolve(), []);
   const setSample = useCallback((sample: number) => setState(previous => ({ ...previous, sample })), []);
   useFocusEffect(useCallback(() => () => stop(), [stop]));
@@ -27,5 +31,5 @@ export function usePlayback(token: string, userId: string, publicationId: string
     const listener = AppState.addEventListener('change', next => { if (next !== 'active') pause(); });
     return () => listener.remove();
   }, [pause]);
-  return { ...state, play, warm, pause, stop, resume, setSample };
+  return { ...state, play, warm, preload, pause, stop, resume, setSample };
 }

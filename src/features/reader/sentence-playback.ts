@@ -205,6 +205,24 @@ export class SentencePlayback {
       void session.ready.catch(() => undefined);
     }
   }
+  /** Prepare a text's library clips without allocating a player for every word.
+   * Two workers bound downloads/decoding; tapping a word reuses the same promise. */
+  preload(plans: PlaybackStep[][], pauseMs: number, publicationId: string) {
+    let cancelled = false, next = 0;
+    const segments = plans.flatMap(playbackSegments);
+    const run = async () => {
+      while (!cancelled && !this.lifetime.signal.aborted && next < segments.length) {
+        const segment = segments[next++];
+        try { (await this.acquire(segment, pauseMs, publicationId)).release(); }
+        catch { /* A failed speculative load can be retried when the word is tapped. */ }
+        // Yield between clips so long libraries cannot block taps or scrolling.
+        if (!cancelled && !this.lifetime.signal.aborted && next < segments.length)
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+      }
+    };
+    void run(); void run();
+    return () => { cancelled = true; };
+  }
   async play(steps: PlaybackStep[], pauseMs: number, publicationId: string, sample = steps[0]?.narrationSample ?? 0) {
     const tappedAt = Date.now(); this.halt();
     if (!steps.length || this.lifetime.signal.aborted) { this.emit({ playing: false, loading: false }); return; }

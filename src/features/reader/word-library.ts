@@ -1,4 +1,4 @@
-import { wordKey } from './model';
+import { wordKey, type PlaybackStep } from './model';
 import type { ReaderWord, WordStatus } from './types';
 
 export interface WordLibraryText {
@@ -51,7 +51,26 @@ export function buildWordLibrary(
       publicationId: first.publicationId,
       lessonId: first.lessonId,
       title,
-      words: unknownWords,
+      words: unknownWords.sort((a, b) => a.occurrence.charStart - b.occurrence.charStart),
     }];
   });
+}
+
+export function wordPlayback(word: ReaderWord): PlaybackStep[] {
+  const clip = word.occurrence.learning?.clip;
+  return clip ? [{ asset: clip, channel: 'drill', startSample: 0, endSample: clip.frameCount,
+    occurrenceId: word.occurrence.id, narrationSample: word.occurrence.startSample }] : [];
+}
+
+/** Keep occurrences distinct, including repeated spellings in the same text. */
+export function shuffleLibraryWords(words: ReaderWord[], random = Math.random): ReaderWord[] {
+  const shuffled = [...words];
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const other = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[other]] = [shuffled[other], shuffled[index]];
+  }
+  // Pressing Shuffle should visibly change the order even when chance returns
+  // the same permutation. Do not alter the canonical source-order array.
+  if (shuffled.length > 1 && shuffled.every((word, index) => word === words[index])) shuffled.push(shuffled.shift()!);
+  return shuffled;
 }

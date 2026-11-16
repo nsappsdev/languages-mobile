@@ -8,6 +8,7 @@ import { saveReaderChange } from '../state-store';
 import { sentenceFixture } from '../testing/fixture';
 import type { ReaderResponse } from '../types';
 import { apiClient } from '@/src/shared/api/client';
+import { palette } from '@/src/shared/theme';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }), useFocusEffect: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: jest.requireActual('react-native').View }));
@@ -147,6 +148,18 @@ it('keeps paused word selection and missing-translation feedback', async () => {
   await tapWord('a2');
   expect(renderer.root.findAll(node => node.props.testID === 'missing-translation-a2').length).toBeGreaterThan(0);
   expect(mockAudio.play).not.toHaveBeenCalled();
+});
+
+it('turns selected words green immediately while their save is still pending', async () => {
+  mockAudio.playing = false; await refresh();
+  const color = () => StyleSheet.flatten(renderer.root.findAll(node => node.props.testID === 'reader-word-text-cat1')[0].props.style).color;
+  expect(color()).toBe(palette.ink);
+  jest.mocked(saveReaderChange).mockImplementationOnce(() => new Promise(() => undefined));
+  await tapWord('cat1');
+  expect(color()).toBe(palette.primaryStrong);
+  expect(button('testID', 'reader-word-cat1').props.accessibilityState.selected).toBe(true);
+  await tapWord('cat1');
+  expect(color()).toBe(palette.ink);
 });
 
 it.each(DEFAULT_MODES)('pulses the translation on the first natural reading in $id mode', async mode => {

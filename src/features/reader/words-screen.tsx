@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '@/src/shared/api/client';
 import { useSession } from '@/src/shared/auth/session-context';
@@ -13,7 +13,7 @@ import type { ReaderWord, WordStatus } from './types';
 import { ResourceState, ui } from './ui';
 import { usePlayback } from './use-playback';
 import { useResource } from './use-resource';
-import { buildWordLibrary } from './word-library';
+import { buildWordLibrary, shuffleLibraryWords, wordPlayback } from './word-library';
 
 export function WordsScreen() {
   const { token, user } = useSession();
@@ -26,7 +26,7 @@ export function WordsScreen() {
   const [overrides, setOverrides] = useState<Record<string, WordStatus>>({});
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [requestedWord, setRequestedWord] = useState<string | null>(null);
-  const audio = usePlayback(token ?? '', user?.id ?? '', '');
+  const [shuffled, setShuffled] = useState<{ releaseId: string; keys: string[] } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -37,19 +37,32 @@ export function WordsScreen() {
     });
   }, [resource.value, user]);
 
-  useEffect(() => {
-    setRevealed({});
-    audio.stop();
-    setRequestedWord(null);
-  // audio.stop is stable; selecting another text must always end its clip.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedReleaseId]);
-
   const library = useMemo(
     () => buildWordLibrary(resource.value?.words ?? [], overrides),
     [overrides, resource.value?.words],
   );
   const selectedText = library.find(text => text.textReleaseId === selectedReleaseId);
+  const audio = usePlayback(token ?? '', user?.id ?? '', selectedText?.publicationId ?? '');
+  const stop = audio.stop;
+  useEffect(() => {
+    setRevealed({}); setShuffled(null); setRequestedWord(null); stop();
+  }, [selectedReleaseId, selectedText?.publicationId, stop]);
+  const isShuffled = shuffled?.releaseId === selectedReleaseId;
+  const displayedWords = useMemo(() => {
+    const words = selectedText?.words ?? [];
+    if (!shuffled || shuffled.releaseId !== selectedReleaseId) return words;
+    const order = new Map(shuffled.keys.map((key, index) => [key, index]));
+    return [...words].sort((a, b) => (order.get(wordKey(a.textReleaseId, a.occurrence.id)) ?? Infinity)
+      - (order.get(wordKey(b.textReleaseId, b.occurrence.id)) ?? Infinity));
+  }, [selectedText, selectedReleaseId, shuffled]);
+  const plans = useMemo(() => selectedText?.words.map(wordPlayback) ?? [], [selectedText]);
+  const preload = audio.preload, warm = audio.warm;
+  useFocusEffect(useCallback(() => preload(plans), [plans, preload]));
+  useFocusEffect(useCallback(() => {
+    const current = Math.max(0, displayedWords.findIndex(word => wordKey(word.textReleaseId, word.occurrence.id) === requestedWord));
+    const nearby = [...displayedWords.slice(current), ...displayedWords.slice(0, current)].slice(0, 3);
+    warm(nearby.map(wordPlayback));
+  }, [displayedWords, requestedWord, warm]));
 
   const openText = (textReleaseId: string) => {
     router.push({ pathname: '/(tabs)/vocabulary', params: { textReleaseId } });
@@ -58,25 +71,21 @@ export function WordsScreen() {
 
   const playWord = (word: ReaderWord) => {
     const key = wordKey(word.textReleaseId, word.occurrence.id);
-    if (requestedWord === key) {
+    if (requestedWord === key && (audio.playing || audio.loading)) {
       audio.stop();
       setRequestedWord(null);
       return;
     }
-    const clip = word.occurrence.learning?.clip;
-    if (!clip) return;
+    const steps = wordPlayback(word);
+    if (!steps.length) return;
 
     setRequestedWord(key);
-    void audio.play([{
-      asset: clip,
-      channel: 'drill',
-      startSample: 0,
-      endSample: clip.frameCount,
-      occurrenceId: word.occurrence.id,
-      narrationSample: word.occurrence.startSample,
-    }], 0, word.publicationId).finally(() => {
-      setRequestedWord(current => current === key ? null : current);
-    });
+    void audio.play(steps, 0, word.publicationId);
+  };
+  const changeOrder = (shuffle: boolean) => {
+    audio.stop(); setRequestedWord(null); setRevealed({});
+    setShuffled(shuffle && selectedReleaseId ? { releaseId: selectedReleaseId,
+      keys: shuffleLibraryWords(displayedWords).map(word => wordKey(word.textReleaseId, word.occurrence.id)) } : null);
   };
 
   return (
@@ -99,28 +108,46 @@ export function WordsScreen() {
                 <Text style={ui.subtitle}>Tap an English word to hear it. Tap its blurred translation to reveal it.</Text>
               </View>
 
+              <View style={styles.orderRow}>
+                <Text accessibilityLiveRegion="polite" style={styles.orderLabel}>{isShuffled ? 'Shuffled' : 'Text order'}</Text>
+                <View style={styles.orderActions}>
+                  {isShuffled ? <Pressable accessibilityRole="button" accessibilityLabel="Restore text order" onPress={() => changeOrder(false)}
+                    style={({ pressed }) => [styles.orderButton, pressed && styles.pressed]}>
+                    <Ionicons name="list-outline" size={18} color={palette.primaryStrong} accessible={false} />
+                    <Text style={styles.orderButtonLabel}>Text order</Text>
+                  </Pressable> : null}
+                  <Pressable accessibilityRole="button" accessibilityLabel="Shuffle words" disabled={displayedWords.length < 2}
+                    onPress={() => changeOrder(true)} style={({ pressed }) => [styles.orderButton,
+                      displayedWords.length < 2 && styles.disabledButton, pressed && styles.pressed]}>
+                    <Ionicons name="shuffle-outline" size={18} color={palette.primaryStrong} accessible={false} />
+                    <Text style={styles.orderButtonLabel}>Shuffle</Text>
+                  </Pressable>
+                </View>
+              </View>
+
               <SyncNotice />
               {audio.error ? <Text accessibilityRole="alert" style={ui.notice}>{audio.error}</Text> : null}
 
               <View style={styles.wordList}>
-                {selectedText.words.map((word, index) => {
+                {displayedWords.map((word, index) => {
                   const key = wordKey(word.textReleaseId, word.occurrence.id);
                   const isRevealed = !!revealed[key];
-                  const isPlaying = requestedWord === key;
+                  const isPlaying = requestedWord === key && (audio.playing || audio.loading);
+                  const isLoading = isPlaying && audio.loading;
                   const translation = meaning(word.occurrence);
                   return (
                     <View
                       key={key}
-                      style={[styles.wordRow, index === selectedText.words.length - 1 && styles.lastWordRow]}>
+                      style={[styles.wordRow, index === displayedWords.length - 1 && styles.lastWordRow]}>
                       <Pressable
-                        accessibilityLabel={`${isPlaying ? 'Stop' : 'Play'} word ${word.occurrence.text}`}
+                        accessibilityLabel={`${isLoading ? 'Cancel loading' : isPlaying ? 'Stop' : 'Play'} word ${word.occurrence.text}`}
                         accessibilityRole="button"
                         disabled={!word.occurrence.learning?.clip}
                         onPress={() => playWord(word)}
                         style={({ pressed }) => [styles.wordSide, pressed && styles.pressed]}>
                         <View style={styles.englishLine}>
                           <Text style={[styles.englishWord, isPlaying && styles.playingWord]}>{word.occurrence.text}</Text>
-                          <Ionicons name={isPlaying ? 'volume-high' : 'volume-medium-outline'} size={18} color={isPlaying ? palette.primary : palette.inkMuted} accessible={false} />
+                          <Ionicons name={isLoading ? 'hourglass-outline' : isPlaying ? 'volume-high' : 'volume-medium-outline'} size={18} color={isPlaying ? palette.primary : palette.inkMuted} accessible={false} />
                         </View>
                       </Pressable>
 
@@ -244,6 +271,13 @@ const styles = StyleSheet.create({
     color: palette.ink,
     ...typography.screenTitle,
   },
+  orderRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing[2] },
+  orderLabel: { color: palette.inkMuted, ...typography.caption },
+  orderActions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing[2] },
+  orderButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing[2], minHeight: controlSize.standard,
+    paddingHorizontal: spacing[3], borderRadius: radii.md, borderWidth: 1, borderColor: palette.borderStrong, backgroundColor: palette.surface },
+  orderButtonLabel: { color: palette.primaryStrong, fontSize: 14, fontWeight: '600' },
+  disabledButton: { opacity: 0.45 },
   wordList: {
     backgroundColor: palette.surface,
     borderColor: palette.border,
