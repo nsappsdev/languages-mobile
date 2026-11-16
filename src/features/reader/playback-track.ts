@@ -57,7 +57,7 @@ export function wavHeader(frameCount: number): Uint8Array {
   return bytes;
 }
 
-export function createPlaybackTrack(steps: PlaybackStep[], assets: ReadonlyMap<string, PcmAudio>, pauseMs: number): PlaybackTrack {
+export function createPlaybackTrack(steps: PlaybackStep[], assets: ReadonlyMap<string, PcmAudio>, pauseMs: number, padEnd = false): PlaybackTrack {
   if (!Number.isFinite(pauseMs) || pauseMs < 0 || pauseMs > 3000) throw new Error('Repetition pause must be between 0 and 3000 ms');
   const gapFrames = Math.round(pauseMs * TRACK_SAMPLE_RATE / 1000);
   const hasGap = (index: number) => index > 0 && !!(steps[index].pauseBefore || steps[index - 1].pauseAfter);
@@ -117,6 +117,15 @@ export function createPlaybackTrack(steps: PlaybackStep[], assets: ReadonlyMap<s
     append(fadeOut ? edge(source.subarray(source.length - ramp * 2), false) : source.subarray(source.length - ramp * 2));
     if (frameCount > start) spans.push({ start, end: frameCount, sourceStart: item.start, sourceEnd: item.end, step: item.step });
   }
+  // A practice word can finish a sentence. Carry its pause across the playlist
+  // boundary instead of losing it when sentences are rendered independently.
+  if (padEnd && steps.at(-1)?.pauseAfter && gapFrames) {
+    const last = prepared[prepared.length - 1];
+    const silence = Math.max(0, gapFrames - last.trailing);
+    spans.push({ start: frameCount, end: frameCount + silence, sourceStart: last.end,
+      sourceEnd: last.end, step: last.step, silence: true });
+    append(new Uint8Array(silence * 2));
+  }
   if (!frameCount) throw new Error('There is no audio to play');
   return { parts: [wavHeader(frameCount), ...parts], spans, frameCount, sampleRate: TRACK_SAMPLE_RATE };
 }
@@ -130,6 +139,6 @@ export function trackPosition(track: Pick<PlaybackTrack, 'spans' | 'frameCount'>
   }
   const span = track.spans[low];
   const source = span.silence ? span.sourceEnd : Math.min(span.sourceEnd, span.sourceStart + Math.max(0, frame - span.start));
-  return { sample: span.step.channel === 'drill' && span.step.repetition?.kind !== 'sentence' ? span.step.narrationSample : source,
+  return { sample: span.step.channel === 'drill' && span.step.repetition?.kind !== 'sentence' ? span.step.narrationSample : source + (span.step.timelineOffset ?? 0),
     occurrenceId: span.silence ? null : span.step.occurrenceId ?? null, repetition: span.step.repetition };
 }

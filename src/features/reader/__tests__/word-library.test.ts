@@ -1,4 +1,4 @@
-import { buildWordLibrary } from '../word-library';
+import { buildWordLibrary, shuffleLibraryWords, wordPlayback } from '../word-library';
 import type { ReaderWord, WordStatus } from '../types';
 import { fixture } from '../testing/fixture';
 
@@ -21,6 +21,22 @@ const makeWord = (
 });
 
 describe('word library', () => {
+  it('defaults to source order regardless of the order returned by the server', () => {
+    const first = makeWord('release-a', 1, 'LEARNING'), last = makeWord('release-a', 3, 'LEARNING');
+    const input = [last, first];
+    expect(buildWordLibrary(input)[0].words).toEqual([first, last]);
+    expect(input).toEqual([last, first]);
+  });
+  it('shuffles distinct occurrences without losing their audio/meaning or mutating text order', () => {
+    const input = [makeWord('release-a', 1, 'LEARNING'), makeWord('release-a', 3, 'LEARNING')];
+    const original = [...input];
+    const shuffled = shuffleLibraryWords(input, () => 0.999);
+    expect(shuffled).toEqual([input[1], input[0]]);
+    expect(input).toEqual(original);
+    expect(shuffleLibraryWords([])).toEqual([]);
+    expect(shuffleLibraryWords([input[0]])).toEqual([input[0]]);
+    expect(wordPlayback(shuffled[0])[0].asset).toBe(input[1].occurrence.learning!.clip);
+  });
   it('shows only learner-selected unknown occurrences inside their text', () => {
     const words = [
       makeWord('release-a', 1, 'LEARNING'),

@@ -1,7 +1,7 @@
-import type { ReaderText } from '../types';
+import type { ReaderAsset, ReaderText } from '../types';
 
 // Synthetic timing metadata for pure unit tests; never served as real audio.
-export const fixture: ReaderText = {
+export const fixture: ReaderText & { narration: ReaderAsset } = {
   textId: 'text-a', textReleaseId: 'release-a', contentRevisionId: 'revision-a', narrationId: 'narration-a', alignmentId: 'alignment-a',
   text: 'A cat, a cat!', sourceLanguage: 'en',
   narration: { id: 'audio-a', sha256: 'hash-a', mimeType: 'audio/wav', byteLength: 2044, frameCount: 1000, sampleRate: 100 },
